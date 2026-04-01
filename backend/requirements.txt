@@ -1,0 +1,14 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sqlalchemy[asyncio]>=2.0
+aiosqlite>=0.20
+python-multipart>=0.0.9
+Pillow>=10.3
+opencv-python-headless>=4.9
+anthropic>=0.25
+openai>=1.20
+pydantic>=2.7
+pydantic-settings>=2.2
+aiofiles>=23.2
+easyocr>=1.7
+torch>=2.0
