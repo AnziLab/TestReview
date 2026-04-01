@@ -33,8 +33,12 @@ export async function getSettings(): Promise<Settings> {
 
 export async function updateSettings(payload: {
   llm_provider: string;
-  llm_api_key: string;
+  llm_api_key?: string;
   llm_model: string;
+  ocr_provider: string;
+  ocr_model?: string;
+  clova_api_url?: string;
+  clova_secret_key?: string;
 }): Promise<Settings> {
   const res = await fetch(`${BASE_URL}/settings`, {
     method: 'PUT',
@@ -77,28 +81,32 @@ export async function deleteExam(id: string): Promise<void> {
 
 export async function uploadTemplate(
   examId: string,
-  file: File
-): Promise<AnswerSheet> {
+  files: File[]
+): Promise<AnswerSheet[]> {
   const form = new FormData();
-  form.append('file', file);
+  for (const file of files) {
+    form.append('files', file);
+  }
   const res = await fetch(`${BASE_URL}/exams/${examId}/template`, {
     method: 'POST',
     body: form,
   });
-  return handleResponse<AnswerSheet>(res);
+  return handleResponse<AnswerSheet[]>(res);
 }
 
-export async function getTemplate(examId: string): Promise<AnswerSheet> {
+export async function getTemplate(examId: string): Promise<AnswerSheet[]> {
   const res = await fetch(`${BASE_URL}/exams/${examId}/template`);
-  return handleResponse<AnswerSheet>(res);
+  return handleResponse<AnswerSheet[]>(res);
 }
 
 export async function detectRegions(
-  examId: string
+  examId: string,
+  pageNumber: number
 ): Promise<Array<{ x: number; y: number; width: number; height: number }>> {
-  const res = await fetch(`${BASE_URL}/exams/${examId}/detect-regions`, {
-    method: 'POST',
-  });
+  const res = await fetch(
+    `${BASE_URL}/exams/${examId}/detect-regions?page_number=${pageNumber}`,
+    { method: 'POST' }
+  );
   return handleResponse<
     Array<{ x: number; y: number; width: number; height: number }>
   >(res);
@@ -119,6 +127,7 @@ export async function saveRegions(
     y: number;
     width: number;
     height: number;
+    page_number?: number;
   }>
 ): Promise<Region[]> {
   const res = await fetch(`${BASE_URL}/exams/${examId}/regions`, {
@@ -188,6 +197,23 @@ export async function uploadStudent(
   return handleResponse<Student>(res);
 }
 
+export async function uploadStudentsBatch(
+  examId: string,
+  files: File[],
+  pagesPerStudent: number
+): Promise<{ students_created: number }> {
+  const form = new FormData();
+  for (const file of files) {
+    form.append('files', file);
+  }
+  form.append('pages_per_student', String(pagesPerStudent));
+  const res = await fetch(`${BASE_URL}/exams/${examId}/students/batch`, {
+    method: 'POST',
+    body: form,
+  });
+  return handleResponse<{ students_created: number }>(res);
+}
+
 export async function deleteStudent(
   examId: string,
   studentId: string
@@ -231,6 +257,16 @@ export async function getGradingSummary(
 
 export async function getAmbiguous(examId: string): Promise<StudentAnswer[]> {
   const res = await fetch(`${BASE_URL}/exams/${examId}/ambiguous`);
+  return handleResponse<StudentAnswer[]>(res);
+}
+
+export async function getStudentAnswersByRegion(
+  examId: string,
+  regionId: string
+): Promise<StudentAnswer[]> {
+  const res = await fetch(
+    `${BASE_URL}/exams/${examId}/regions/${regionId}/answers`
+  );
   return handleResponse<StudentAnswer[]>(res);
 }
 

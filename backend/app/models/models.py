@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     String,
     Text,
 )
@@ -41,6 +42,7 @@ class AnswerSheet(Base):
     id = Column(String, primary_key=True, default=_new_uuid)
     exam_id = Column(String, ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
     image_path = Column(String, nullable=False)
+    page_number = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=_now)
 
     exam = relationship("Exam", back_populates="answer_sheets")
@@ -66,6 +68,18 @@ class Region(Base):
     student_answers = relationship("StudentAnswer", back_populates="region", cascade="all, delete-orphan")
 
 
+class StudentPage(Base):
+    __tablename__ = "student_pages"
+
+    id = Column(String, primary_key=True, default=_new_uuid)
+    student_id = Column(String, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    page_number = Column(Integer, nullable=False)
+    image_path = Column(String(500), nullable=False)
+    created_at = Column(DateTime, default=_now)
+
+    student = relationship("Student", back_populates="pages")
+
+
 class Student(Base):
     __tablename__ = "students"
 
@@ -73,11 +87,12 @@ class Student(Base):
     exam_id = Column(String, ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
     student_number = Column(String, nullable=False)
-    scan_image_path = Column(String, nullable=True)
+    scan_image_path = Column(String, nullable=True)  # kept for backwards compat
     created_at = Column(DateTime, default=_now)
 
     exam = relationship("Exam", back_populates="students")
     answers = relationship("StudentAnswer", back_populates="student", cascade="all, delete-orphan")
+    pages = relationship("StudentPage", back_populates="student", cascade="all, delete-orphan")
 
 
 class StudentAnswer(Base):
@@ -91,8 +106,9 @@ class StudentAnswer(Base):
     score = Column(Float, nullable=True)
     is_ambiguous = Column(Boolean, default=False)
     ambiguity_reason = Column(Text, nullable=True)
-    grading_status = Column(String, default="pending")  # pending, graded, needs_review
+    grading_status = Column(String, default="pending")  # pending, 초검완료, 재검완료, needs_review
     grading_feedback = Column(Text, nullable=True)
+    review_round = Column(Integer, default=1)  # 1=초검, 2=재검
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)
 
@@ -107,5 +123,9 @@ class Settings(Base):
     llm_provider = Column(String, nullable=False, default="anthropic")
     llm_api_key = Column(String, nullable=True)
     llm_model = Column(String, nullable=True)
+    ocr_provider = Column(String(50), default="gpt")  # "gpt" or "clova"
+    ocr_model = Column(String(100), nullable=True)  # e.g. "gpt-5.4-nano"
+    clova_api_url = Column(String(500), nullable=True)
+    clova_secret_key = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)

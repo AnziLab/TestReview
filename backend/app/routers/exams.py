@@ -1,8 +1,9 @@
+import io
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,24 @@ from app.schemas.schemas import (
 from app.services.image_processing import detect_cells
 
 router = APIRouter(tags=["exams"])
+
+
+def _split_pdf_to_images(pdf_bytes: bytes) -> list[bytes]:
+    """Split a PDF into a list of PNG image bytes (one per page)."""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="PyMuPDF is not installed. Install it with: pip install PyMuPDF",
+        )
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    pages = []
+    for page in doc:
+        pix = page.get_pixmap(dpi=150)
+        pages.append(pix.tobytes("png"))
+    doc.close()
+    return pages
 
 
 @router.post("/exams", response_model=ExamResponse)
@@ -61,65 +80,108 @@ async def delete_exam(exam_id: str, db: AsyncSession = Depends(get_db)):
     return {"message": "시험이 삭제되었습니다."}
 
 
-@router.post("/exams/{exam_id}/template", response_model=AnswerSheetResponse)
+@router.post("/exams/{exam_id}/template", response_model=List[AnswerSheetResponse])
 async def upload_template(
     exam_id: str,
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Upload one or more template pages for an exam.
+    Accepts:
+    - A single PDF file (split into pages automatically)
+    - One or more image files (each becomes a page in order)
+    Replaces any previously uploaded template pages.
+    """
     result = await db.execute(select(Exam).where(Exam.id == exam_id))
     exam = result.scalar_one_or_none()
     if not exam:
         raise HTTPException(status_code=404, detail="시험을 찾을 수 없습니다.")
 
+    # Delete existing answer sheets for this exam
     old_result = await db.execute(
         select(AnswerSheet).where(AnswerSheet.exam_id == exam_id)
     )
-    old = old_result.scalar_one_or_none()
-    if old:
+    for old in old_result.scalars().all():
         await db.delete(old)
+    await db.flush()
 
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename else "png"
-    filename = f"template_{exam_id}.{ext}"
-    filepath = UPLOADS_DIR / filename
-    content = await file.read()
-    filepath.write_bytes(content)
+    page_images: list[tuple[str, bytes]] = []  # (original_filename_hint, image_bytes)
 
-    sheet = AnswerSheet(
-        id=str(uuid.uuid4()),
-        exam_id=exam_id,
-        image_path=f"uploads/{filename}",
-        created_at=datetime.utcnow(),
-    )
-    db.add(sheet)
+    for uploaded_file in files:
+        content = await uploaded_file.read()
+        fname = uploaded_file.filename or ""
+        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else "png"
+
+        if ext == "pdf":
+            # Split PDF into individual page images
+            split_pages = _split_pdf_to_images(content)
+            for i, page_bytes in enumerate(split_pages):
+                page_images.append((f"pdf_page_{i + 1}", page_bytes))
+        else:
+            page_images.append((fname, content))
+
+    if not page_images:
+        raise HTTPException(status_code=400, detail="업로드할 파일이 없습니다.")
+
+    now = datetime.utcnow()
+    created_sheets: list[AnswerSheet] = []
+
+    for page_number, (fname_hint, image_bytes) in enumerate(page_images, start=1):
+        filename = f"template_{exam_id}_p{page_number}.png"
+        filepath = UPLOADS_DIR / filename
+        filepath.write_bytes(image_bytes)
+
+        sheet = AnswerSheet(
+            id=str(uuid.uuid4()),
+            exam_id=exam_id,
+            image_path=f"uploads/{filename}",
+            page_number=page_number,
+            created_at=now,
+        )
+        db.add(sheet)
+        created_sheets.append(sheet)
+
     await db.commit()
-    await db.refresh(sheet)
-    return sheet
+    for sheet in created_sheets:
+        await db.refresh(sheet)
+
+    return created_sheets
 
 
-@router.get("/exams/{exam_id}/template", response_model=AnswerSheetResponse)
+@router.get("/exams/{exam_id}/template", response_model=List[AnswerSheetResponse])
 async def get_template(exam_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(AnswerSheet).where(AnswerSheet.exam_id == exam_id)
+        select(AnswerSheet)
+        .where(AnswerSheet.exam_id == exam_id)
+        .order_by(AnswerSheet.page_number)
     )
-    sheet = result.scalar_one_or_none()
-    if not sheet:
+    sheets = result.scalars().all()
+    if not sheets:
         raise HTTPException(status_code=404, detail="템플릿이 없습니다.")
-    return sheet
+    return sheets
 
 
 @router.post(
     "/exams/{exam_id}/detect-regions", response_model=List[DetectedRegion]
 )
 async def detect_regions_endpoint(
-    exam_id: str, db: AsyncSession = Depends(get_db)
+    exam_id: str,
+    page_number: Optional[int] = Query(default=1, ge=1),
+    db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(AnswerSheet).where(AnswerSheet.exam_id == exam_id)
+        select(AnswerSheet).where(
+            AnswerSheet.exam_id == exam_id,
+            AnswerSheet.page_number == page_number,
+        )
     )
     sheet = result.scalar_one_or_none()
     if not sheet:
-        raise HTTPException(status_code=404, detail="템플릿이 없습니다.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"페이지 {page_number}의 템플릿이 없습니다.",
+        )
 
     from app.config import BASE_DIR
     full_path = str(BASE_DIR / sheet.image_path)

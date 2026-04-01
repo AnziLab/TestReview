@@ -21,7 +21,7 @@ class LLMClient:
         if self.provider == "anthropic":
             self.model = model or "claude-opus-4-5"
         elif self.provider == "openai":
-            self.model = model or "gpt-4o"
+            self.model = model or "gpt-5.4-nano"
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 

@@ -151,7 +151,6 @@ export default function RegionEditor({
                 height: `${region.height * 100}%`,
                 borderColor: COLORS[idx % COLORS.length],
                 backgroundColor: `${COLORS[idx % COLORS.length]}15`,
-                ringColor: COLORS[idx % COLORS.length],
               }}
             >
               <span

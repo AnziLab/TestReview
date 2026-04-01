@@ -42,7 +42,7 @@ export default function ExamSteps({ examId, currentStep }: ExamStepsProps) {
               }`}
             >
               <span
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                className={`min-w-[2.5rem] h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 px-1 ${
                   isCurrent
                     ? 'bg-white text-blue-600'
                     : isCompleted
@@ -59,7 +59,7 @@ export default function ExamSteps({ examId, currentStep }: ExamStepsProps) {
                     />
                   </svg>
                 ) : (
-                  step.stepNum
+                  `${step.stepNum}단계`
                 )}
               </span>
               {step.label}

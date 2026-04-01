@@ -10,7 +10,7 @@ import {
   getRegions,
   getGradingSummary,
   checkGrading,
-  getAmbiguous,
+  getStudentAnswersByRegion,
 } from '@/lib/api';
 import { Exam, Region, GradingSummary, StudentAnswer } from '@/lib/types';
 
@@ -23,6 +23,7 @@ export default function GradingPage() {
   const [summaries, setSummaries] = useState<GradingSummary[]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<StudentAnswer[]>([]);
+  const [loadingAnswers, setLoadingAnswers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export default function GradingPage() {
         if (Array.isArray(summaryData)) {
           setSummaries(summaryData);
         } else {
-          setSummaries((summaryData as any).questions || []);
+          setSummaries((summaryData as { questions?: GradingSummary[] }).questions || []);
         }
         if (regionsData.length > 0) {
           setSelectedRegionId(regionsData[0].id);
@@ -61,13 +62,14 @@ export default function GradingPage() {
   }, [selectedRegionId]);
 
   async function loadAnswersForRegion(regionId: string) {
+    setLoadingAnswers(true);
     try {
-      const ambiguous = await getAmbiguous(examId);
-      // For now, we display all ambiguous answers for the selected region
-      // In a full implementation, we'd have a dedicated endpoint per region
-      setAnswers(ambiguous.filter((a: StudentAnswer) => a.region_id === regionId));
+      const allAnswers = await getStudentAnswersByRegion(examId, regionId);
+      setAnswers(allAnswers);
     } catch {
       setAnswers([]);
+    } finally {
+      setLoadingAnswers(false);
     }
   }
 
@@ -77,13 +79,23 @@ export default function GradingPage() {
     setSuccess(null);
     try {
       const result = await checkGrading(examId, regionId);
-      const msg = (result as any).message || 
-        `채점 완료: ${(result as any).total_processed || 0}명 처리, ${(result as any).ambiguous_count || 0}명 검토 필요`;
+      const resultAny = result as {
+        message?: string;
+        total_processed?: number;
+        ambiguous_count?: number;
+      };
+      const msg =
+        resultAny.message ||
+        `채점 완료: ${resultAny.total_processed || 0}명 처리, ${resultAny.ambiguous_count || 0}명 검토 필요`;
       setSuccess(msg);
 
-      // Reload data
+      // Reload summary and answers
       const summaryData = await getGradingSummary(examId);
-      setSummaries(Array.isArray(summaryData) ? summaryData : (summaryData as any).questions || []);
+      setSummaries(
+        Array.isArray(summaryData)
+          ? summaryData
+          : (summaryData as { questions?: GradingSummary[] }).questions || []
+      );
       if (selectedRegionId === regionId) {
         await loadAnswersForRegion(regionId);
       }
@@ -96,7 +108,11 @@ export default function GradingPage() {
 
   function handleAnswerUpdated(updated: StudentAnswer) {
     setAnswers((prev) =>
-      prev.map((a) => (a.id === updated.id ? { ...updated, student_name: a.student_name, student_number: a.student_number } : a))
+      prev.map((a) =>
+        a.id === updated.id
+          ? { ...updated, student_name: a.student_name, student_number: a.student_number }
+          : a
+      )
     );
   }
 
@@ -131,7 +147,7 @@ export default function GradingPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">채점 대시보드</h1>
         <p className="text-sm text-gray-500 mt-1">
-          문항별로 채점 기준을 점검하고 모호한 답안을 검토하세요.
+          문항별로 채점 기준을 점검하고 학생 답안을 검토하세요.
         </p>
       </div>
 
@@ -218,12 +234,23 @@ export default function GradingPage() {
                 <h2 className="font-semibold text-gray-900">
                   문항 {selectedRegion.question_number} - 학생 답안
                 </h2>
+                {loadingAnswers && (
+                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    불러오는 중...
+                  </span>
+                )}
               </div>
-              <GradingTable
-                answers={answers}
-                maxScore={selectedRegion.max_score}
-                onAnswerUpdated={handleAnswerUpdated}
-              />
+              {!loadingAnswers && (
+                <GradingTable
+                  answers={answers}
+                  maxScore={selectedRegion.max_score}
+                  onAnswerUpdated={handleAnswerUpdated}
+                />
+              )}
             </div>
           )}
         </div>

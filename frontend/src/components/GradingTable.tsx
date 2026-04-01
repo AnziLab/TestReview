@@ -11,18 +11,22 @@ interface GradingTableProps {
 }
 
 export default function GradingTable({ answers, maxScore, onAnswerUpdated }: GradingTableProps) {
-  const [filter, setFilter] = useState<'all' | 'ambiguous'>('all');
+  const [filter, setFilter] = useState<'all' | 'ambiguous' | 'graded'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editScore, setEditScore] = useState<string>('');
   const [editingOcrId, setEditingOcrId] = useState<string | null>(null);
   const [editOcrText, setEditOcrText] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
-  const filtered = filter === 'ambiguous'
-    ? answers.filter((a) => a.is_ambiguous)
-    : answers;
+  const filtered =
+    filter === 'ambiguous'
+      ? answers.filter((a) => a.is_ambiguous)
+      : filter === 'graded'
+      ? answers.filter((a) => a.grading_status === 'graded' && !a.is_ambiguous)
+      : answers;
 
   const ambiguousCount = answers.filter((a) => a.is_ambiguous).length;
+  const gradedCount = answers.filter((a) => a.grading_status === 'graded' && !a.is_ambiguous).length;
 
   async function handleSaveScore(answerId: string) {
     setSaving(true);
@@ -90,13 +94,27 @@ export default function GradingTable({ answers, maxScore, onAnswerUpdated }: Gra
               : 'text-gray-600 hover:bg-gray-100'
           }`}
         >
-          검토 필요 ({ambiguousCount})
+          모호한 답안만 ({ambiguousCount})
+        </button>
+        <button
+          onClick={() => setFilter('graded')}
+          className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+            filter === 'graded'
+              ? 'bg-green-100 text-green-700 font-medium'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          채점 완료 ({gradedCount})
         </button>
       </div>
 
       {filtered.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-8">
-          {filter === 'ambiguous' ? '검토가 필요한 답안이 없습니다.' : '답안이 없습니다.'}
+          {filter === 'ambiguous'
+            ? '검토가 필요한 답안이 없습니다.'
+            : filter === 'graded'
+            ? '채점 완료된 답안이 없습니다.'
+            : '답안이 없습니다.'}
         </p>
       ) : (
         <div className="overflow-x-auto">

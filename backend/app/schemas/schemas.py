@@ -10,6 +10,10 @@ class SettingsUpdate(BaseModel):
     llm_provider: str
     llm_api_key: str
     llm_model: str
+    ocr_provider: Optional[str] = None
+    ocr_model: Optional[str] = None
+    clova_api_url: Optional[str] = None
+    clova_secret_key: Optional[str] = None
 
 
 class SettingsResponse(BaseModel):
@@ -19,6 +23,10 @@ class SettingsResponse(BaseModel):
     llm_provider: str
     llm_api_key_masked: Optional[str] = None
     llm_model: Optional[str]
+    ocr_provider: Optional[str] = None
+    ocr_model: Optional[str] = None
+    clova_api_url: Optional[str] = None
+    clova_secret_key_masked: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -46,6 +54,7 @@ class AnswerSheetResponse(BaseModel):
     id: str
     exam_id: str
     image_path: str
+    page_number: int
     created_at: datetime
 
 
@@ -93,6 +102,18 @@ class RegionsBulkCreate(BaseModel):
     regions: List[RegionCreate]
 
 
+# ─── Student Page ──────────────────────────────────────────────────────────────
+
+class StudentPageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    student_id: str
+    page_number: int
+    image_path: str
+    created_at: datetime
+
+
 # ─── Student ──────────────────────────────────────────────────────────────────
 
 class StudentResponse(BaseModel):
@@ -103,6 +124,7 @@ class StudentResponse(BaseModel):
     name: str
     student_number: str
     scan_image_path: Optional[str]
+    pages: List[StudentPageResponse] = []
     created_at: datetime
 
 
@@ -114,6 +136,7 @@ class StudentAnswerUpdate(BaseModel):
     grading_feedback: Optional[str] = None
     is_ambiguous: Optional[bool] = None
     ambiguity_reason: Optional[str] = None
+    review_round: Optional[int] = None
 
 
 class StudentAnswerResponse(BaseModel):
@@ -129,6 +152,7 @@ class StudentAnswerResponse(BaseModel):
     ambiguity_reason: Optional[str]
     grading_status: str
     grading_feedback: Optional[str]
+    review_round: int
     created_at: datetime
     updated_at: datetime
 
@@ -141,6 +165,7 @@ class StudentDetailResponse(BaseModel):
     name: str
     student_number: str
     scan_image_path: Optional[str]
+    pages: List[StudentPageResponse] = []
     created_at: datetime
     answers: List[StudentAnswerResponse] = []
 

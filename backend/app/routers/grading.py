@@ -16,7 +16,7 @@ from app.schemas.schemas import (
     AmbiguousAnswerResponse,
     CheckGradingResponse,
 )
-from app.services.ocr_service import run_ocr_for_exam, save_ocr_correction, set_ocr_languages
+from app.services.ocr_service import run_ocr_for_exam, save_ocr_correction
 from app.services.grading_service import check_grading_for_region
 
 router = APIRouter(tags=["grading"])
@@ -47,12 +47,13 @@ async def check_grading(
 
 @router.get("/exams/{exam_id}/grading-summary", response_model=GradingSummaryResponse)
 async def grading_summary(exam_id: str, db: AsyncSession = Depends(get_db)):
-    sheet_result = await db.execute(
+    sheets_result = await db.execute(
         select(AnswerSheet)
         .where(AnswerSheet.exam_id == exam_id)
         .options(selectinload(AnswerSheet.regions))
+        .order_by(AnswerSheet.page_number)
     )
-    sheet = sheet_result.scalar_one_or_none()
+    sheets = sheets_result.scalars().all()
 
     student_count_result = await db.execute(
         select(func.count(Student.id)).where(Student.exam_id == exam_id)
@@ -61,28 +62,32 @@ async def grading_summary(exam_id: str, db: AsyncSession = Depends(get_db)):
 
     questions: list[GradingRegionSummary] = []
 
-    if sheet and sheet.regions:
-        for region in sorted(sheet.regions, key=lambda r: r.question_number):
-            answers_result = await db.execute(
-                select(StudentAnswer).where(StudentAnswer.region_id == region.id)
-            )
-            answers = answers_result.scalars().all()
+    # Collect all regions across all pages
+    all_regions: list[Region] = []
+    for sheet in sheets:
+        all_regions.extend(sheet.regions)
 
-            graded = [a for a in answers if a.grading_status == "graded"]
-            ambiguous = [a for a in answers if a.is_ambiguous]
-            scores = [a.score for a in answers if a.score is not None]
+    for region in sorted(all_regions, key=lambda r: r.question_number):
+        answers_result = await db.execute(
+            select(StudentAnswer).where(StudentAnswer.region_id == region.id)
+        )
+        answers = answers_result.scalars().all()
 
-            questions.append(
-                GradingRegionSummary(
-                    region_id=region.id,
-                    question_number=region.question_number,
-                    total_students=len(answers),
-                    graded_count=len(graded),
-                    ambiguous_count=len(ambiguous),
-                    avg_score=round(sum(scores) / len(scores), 2) if scores else None,
-                    max_score=region.max_score,
-                )
+        graded = [a for a in answers if a.grading_status == "graded"]
+        ambiguous = [a for a in answers if a.is_ambiguous]
+        scores = [a.score for a in answers if a.score is not None]
+
+        questions.append(
+            GradingRegionSummary(
+                region_id=region.id,
+                question_number=region.question_number,
+                total_students=len(answers),
+                graded_count=len(graded),
+                ambiguous_count=len(ambiguous),
+                avg_score=round(sum(scores) / len(scores), 2) if scores else None,
+                max_score=region.max_score,
             )
+        )
 
     return GradingSummaryResponse(
         exam_id=exam_id,
@@ -95,16 +100,16 @@ async def grading_summary(exam_id: str, db: AsyncSession = Depends(get_db)):
     "/exams/{exam_id}/ambiguous", response_model=List[AmbiguousAnswerResponse]
 )
 async def list_ambiguous(exam_id: str, db: AsyncSession = Depends(get_db)):
-    sheet_result = await db.execute(
+    sheets_result = await db.execute(
         select(AnswerSheet)
         .where(AnswerSheet.exam_id == exam_id)
         .options(selectinload(AnswerSheet.regions))
     )
-    sheet = sheet_result.scalar_one_or_none()
-    if not sheet:
+    sheets = sheets_result.scalars().all()
+    if not sheets:
         return []
 
-    region_ids = [r.id for r in sheet.regions]
+    region_ids = [r.id for sheet in sheets for r in sheet.regions]
     if not region_ids:
         return []
 
@@ -193,70 +198,3 @@ async def correct_ocr_text(
     return {"message": "OCR 텍스트가 수정되었습니다."}
 
 
-@router.put("/settings/ocr-languages")
-async def update_ocr_languages(payload: dict):
-    """
-    Set languages for EasyOCR recognition.
-    Supported: ko, en, ja, zh, etc.
-    Forces the OCR model to reload with new languages on next use.
-    """
-    languages = payload.get("languages", ["ko", "en"])
-    if not isinstance(languages, list) or len(languages) == 0:
-        raise HTTPException(status_code=400, detail="languages는 비어있지 않은 리스트여야 합니다.")
-    set_ocr_languages(languages)
-    return {"message": f"OCR 언어가 {languages}로 변경되었습니다.", "languages": languages}
-
-
-@router.get("/exams/{exam_id}/training-data")
-async def export_training_data(
-    exam_id: str, db: AsyncSession = Depends(get_db)
-):
-    """
-    Export OCR correction pairs for future model fine-tuning.
-    Returns pairs of (image_region_info, corrected_text) for answers
-    that were manually corrected by teachers.
-    """
-    sheet_result = await db.execute(
-        select(AnswerSheet)
-        .where(AnswerSheet.exam_id == exam_id)
-        .options(selectinload(AnswerSheet.regions))
-    )
-    sheet = sheet_result.scalar_one_or_none()
-    if not sheet:
-        return {"training_pairs": []}
-
-    region_ids = [r.id for r in sheet.regions]
-    if not region_ids:
-        return {"training_pairs": []}
-
-    result = await db.execute(
-        select(StudentAnswer)
-        .where(StudentAnswer.region_id.in_(region_ids))
-        .options(
-            selectinload(StudentAnswer.student),
-            selectinload(StudentAnswer.region),
-        )
-    )
-    answers = result.scalars().all()
-
-    # Include all answers that have OCR text (teachers can correct these)
-    training_pairs = []
-    for a in answers:
-        if a.ocr_text and a.student and a.region:
-            training_pairs.append({
-                "student_scan_path": a.student.scan_image_path,
-                "region": {
-                    "x": a.region.x,
-                    "y": a.region.y,
-                    "width": a.region.width,
-                    "height": a.region.height,
-                },
-                "ocr_text": a.ocr_text,
-                "confidence": a.ocr_confidence,
-            })
-
-    return {
-        "exam_id": exam_id,
-        "total_pairs": len(training_pairs),
-        "training_pairs": training_pairs,
-    }

@@ -9,7 +9,15 @@ export interface AnswerSheet {
   id: string;
   exam_id: string;
   image_path: string;
+  page_number: number;
   created_at: string;
+}
+
+export interface StudentPage {
+  id: string;
+  student_id: string;
+  page_number: number;
+  image_path: string;
 }
 
 export interface Region {
@@ -31,7 +39,8 @@ export interface Student {
   exam_id: string;
   name: string;
   student_number: string;
-  scan_image_path: string;
+  scan_image_path: string | null;
+  pages: StudentPage[];
   created_at: string;
 }
 
@@ -59,9 +68,15 @@ export interface GradingSummary {
 }
 
 export interface Settings {
+  // Grading LLM
   llm_provider: string;
   llm_api_key_masked: string;
   llm_model: string;
+  // OCR settings
+  ocr_provider: string;
+  ocr_model: string | null;
+  clova_api_url: string | null;
+  clova_secret_key_masked: string | null;
 }
 
 // For region drawing in the UI (before saving)
