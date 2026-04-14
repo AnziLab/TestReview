@@ -1,47 +1,43 @@
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
-from app.config import UPLOADS_DIR
-from app.database import create_tables
-from app.routers import exams, regions, students, grading, settings
+from app.api.v1 import router as api_v1_router
+from app.config import settings
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await create_tables()
+    # Ensure storage directory exists
+    Path(settings.STORAGE_PATH).mkdir(parents=True, exist_ok=True)
+    logger.info(f"Storage path: {settings.STORAGE_PATH}")
     yield
 
 
 app = FastAPI(
-    title="Handwriting Grading API",
-    description="Backend for handwriting-based exam grading with OCR and LLM evaluation",
+    title="Handwriting Grading System",
+    description="한국 중고등학교 서답형 시험 채점기준표 정제 및 자동채점 API",
     version="1.0.0",
     lifespan=lifespan,
 )
 
-# Allow all origins for development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Serve uploaded images as static files
-app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
-
-# Register all routers
-app.include_router(settings.router, prefix="/api")
-app.include_router(exams.router, prefix="/api")
-app.include_router(regions.router, prefix="/api")
-app.include_router(students.router, prefix="/api")
-app.include_router(grading.router, prefix="/api")
+app.include_router(api_v1_router)
 
 
-@app.get("/")
-async def root():
-    return {"message": "Handwriting Grading API", "docs": "/docs"}
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}

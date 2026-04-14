@@ -1,87 +1,93 @@
+export interface User {
+  id: number
+  username: string
+  email: string
+  full_name: string
+  school?: string
+  role: 'teacher' | 'admin'
+  status: 'pending' | 'approved' | 'rejected'
+  has_api_key: boolean
+}
+
 export interface Exam {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
+  id: number
+  title: string
+  subject?: string
+  grade?: number
+  status: 'draft' | 'rubric_ready' | 'answers_uploaded' | 'rubric_refined' | 'graded'
+  question_count?: number
+  created_at: string
+  updated_at: string
 }
 
-export interface AnswerSheet {
-  id: string;
-  exam_id: string;
-  image_path: string;
-  page_number: number;
-  created_at: string;
+export interface Question {
+  id: number
+  exam_id: number
+  number: string
+  order_index: number
+  question_text?: string
+  max_score: number
+  model_answer?: string
+  rubric_json: RubricJson
+  rubric_draft_json?: RubricJson
+  rubric_version: number
 }
 
-export interface StudentPage {
-  id: string;
-  student_id: string;
-  page_number: number;
-  image_path: string;
+export interface RubricJson {
+  criteria: Array<{ id: string; description: string; points: number }>
+  notes: string
 }
 
-export interface Region {
-  id: string;
-  answer_sheet_id: string;
-  question_number: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  model_answer: string | null;
-  rubric: string | null;
-  max_score: number;
-  created_at: string;
+export interface Class {
+  id: number
+  exam_id: number
+  name: string
+  scan_mode: 'single' | 'double'
+  ocr_status: 'pending' | 'processing' | 'done' | 'failed'
+  ocr_error?: string
+  student_count?: number
 }
 
 export interface Student {
-  id: string;
-  exam_id: string;
-  name: string;
-  student_number: string;
-  scan_image_path: string | null;
-  pages: StudentPage[];
-  created_at: string;
+  id: number
+  class_id: number
+  student_number?: string
+  name?: string
+  needs_review: boolean
 }
 
-export interface StudentAnswer {
-  id: string;
-  student_id: string;
-  region_id: string;
-  ocr_text: string | null;
-  score: number | null;
-  is_ambiguous: boolean;
-  ambiguity_reason: string | null;
-  grading_status: string;
-  grading_feedback: string | null;
-  student_name?: string;
-  student_number?: string;
+export interface Answer {
+  id: number
+  student_id: number
+  question_id: number
+  answer_text: string
 }
 
-export interface GradingSummary {
-  region_id: string;
-  question_number: string;
-  total_students: number;
-  graded_count: number;
-  ambiguous_count: number;
-  average_score: number | null;
+export interface RefinementSession {
+  id: number
+  question_id: number
+  status: 'running' | 'done' | 'failed'
+  created_at: string
+  completed_at?: string
+  cluster_count?: number
+  unjudgable_count?: number
 }
 
-export interface Settings {
-  id: string;
-  gemini_api_key_masked?: string | null;
-  gemini_model?: string | null;
-  created_at: string;
-  updated_at: string;
+export interface AnswerCluster {
+  id: number
+  session_id: number
+  label: string
+  representative_text: string
+  size: number
+  judgable: boolean
+  suggested_score?: number
+  reason?: string
 }
 
-// For region drawing in the UI (before saving)
-export interface DraftRegion {
-  id: string; // temporary local id
-  question_number: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  saved?: boolean;
+export interface GradingResult {
+  student_id: number
+  student_number?: string
+  name?: string
+  scores: Record<number, number | null>
+  total: number
 }

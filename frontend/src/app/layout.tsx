@@ -1,25 +1,20 @@
-import type { Metadata } from 'next';
-import './globals.css';
-import Navbar from '@/components/Navbar';
+import type { Metadata } from 'next'
+import './globals.css'
+import { AuthProvider } from '@/lib/context/AuthContext'
 
 export const metadata: Metadata = {
-  title: 'TestReview - 손글씨 채점 시스템',
-  description: '손글씨 답안지 자동 채점 시스템',
-};
+  title: '채점기준 정제 도구',
+  description: '한국 중고등학교 교사용 서답형 시험 채점기준표 정제 도구',
+}
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
-      <body>
-        <Navbar />
-        <main className="ml-60 min-h-screen bg-slate-50">
-          <div className="max-w-7xl mx-auto px-6 py-8">{children}</div>
-        </main>
+      <body className="bg-gray-50 text-gray-900 antialiased">
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
-  );
+  )
 }

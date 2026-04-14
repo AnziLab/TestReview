@@ -1,104 +1,93 @@
-from datetime import datetime
+"""Background service: auto-grade all answers for an exam."""
+import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from app.models.models import Region, StudentAnswer, Settings
-from app.services.llm_client import GeminiClient
+from app.database import AsyncSessionLocal
+from app.gemini.client import get_gemini_client
+from app.gemini.grading import grade_answers
+from app.models.answer import Answer
+from app.models.exam import Exam, Question
+from app.models.grading import Grading
+from app.models.user import User
 
-
-async def _get_llm_client(db: AsyncSession) -> GeminiClient:
-    result = await db.execute(select(Settings).limit(1))
-    settings = result.scalar_one_or_none()
-    if settings is None or not settings.gemini_api_key:
-        raise ValueError("Gemini API 키가 설정되지 않았습니다. 설정 페이지에서 API 키를 입력해주세요.")
-    return GeminiClient(
-        api_key=settings.gemini_api_key,
-        model=settings.gemini_model or "gemini-2.0-flash",
-    )
+logger = logging.getLogger(__name__)
 
 
-async def check_grading_for_region(region_id: str, db: AsyncSession) -> dict:
-    """Grade all student answers for a specific question/region."""
-    llm_client = await _get_llm_client(db)
+async def run_grading(exam_id: int, teacher_id: int) -> None:
+    """BackgroundTask: auto-grade all answers for an exam question by question."""
+    async with AsyncSessionLocal() as db:
+        exam = await db.get(Exam, exam_id)
+        if exam is None:
+            return
 
-    result = await db.execute(select(Region).where(Region.id == region_id))
-    region = result.scalar_one_or_none()
-    if not region:
-        raise ValueError("영역을 찾을 수 없습니다.")
-
-    if not region.model_answer and not region.rubric:
-        raise ValueError("모범 답안 또는 채점 기준을 먼저 입력해주세요.")
-
-    answers_result = await db.execute(
-        select(StudentAnswer)
-        .where(StudentAnswer.region_id == region_id)
-        .options(selectinload(StudentAnswer.student))
-    )
-    answers = answers_result.scalars().all()
-
-    if not answers:
-        raise ValueError("이 문항에 대한 학생 답안이 없습니다. 먼저 OCR을 실행해주세요.")
-
-    results = []
-    ambiguous_count = 0
-
-    for answer in answers:
-        if not answer.ocr_text:
-            continue
+        teacher = await db.get(User, teacher_id)
+        if teacher is None or not teacher.gemini_api_key_encrypted:
+            logger.error(f"Teacher {teacher_id} has no Gemini API key")
+            return
 
         try:
-            evaluation = await llm_client.evaluate_answer(
-                student_answer=answer.ocr_text,
-                model_answer=region.model_answer or "",
-                rubric=region.rubric or "",
-                max_score=region.max_score,
+            client = get_gemini_client(teacher.gemini_api_key_encrypted)
+
+            questions_result = await db.execute(
+                select(Question).where(Question.exam_id == exam_id)
             )
+            questions = questions_result.scalars().all()
 
-            answer.score = evaluation["score"]
-            answer.grading_feedback = evaluation["feedback"]
-            answer.is_ambiguous = evaluation["is_ambiguous"]
-            answer.ambiguity_reason = evaluation.get("ambiguity_reason")
-            answer.grading_status = "needs_review" if evaluation["is_ambiguous"] else "graded"
-            answer.updated_at = datetime.utcnow()
+            for question in questions:
+                answers_result = await db.execute(
+                    select(Answer).where(Answer.question_id == question.id)
+                )
+                answers = answers_result.scalars().all()
+                if not answers:
+                    continue
 
-            if evaluation["is_ambiguous"]:
-                ambiguous_count += 1
+                answer_dicts = [
+                    {"id": a.id, "text": a.answer_text} for a in answers
+                ]
 
-            results.append({
-                "student_id": answer.student_id,
-                "student_name": answer.student.name if answer.student else "",
-                "ocr_text": answer.ocr_text,
-                "score": evaluation["score"],
-                "feedback": evaluation["feedback"],
-                "is_ambiguous": evaluation["is_ambiguous"],
-                "ambiguity_reason": evaluation.get("ambiguity_reason"),
-            })
+                try:
+                    grading_results = await grade_answers(
+                        client, question.rubric_json, answer_dicts
+                    )
+                except Exception as exc:
+                    logger.warning(f"Grading failed for question {question.id}: {exc}")
+                    continue
 
-        except Exception as e:
-            answer.grading_status = "needs_review"
-            answer.is_ambiguous = True
-            answer.ambiguity_reason = f"채점 오류: {str(e)}"
-            answer.updated_at = datetime.utcnow()
-            ambiguous_count += 1
+                for result in grading_results:
+                    answer_id = result.get("answer_id")
+                    if answer_id is None:
+                        continue
 
-            results.append({
-                "student_id": answer.student_id,
-                "student_name": answer.student.name if answer.student else "",
-                "ocr_text": answer.ocr_text,
-                "score": None,
-                "feedback": f"오류: {str(e)}",
-                "is_ambiguous": True,
-                "ambiguity_reason": f"채점 오류: {str(e)}",
-            })
+                    # Upsert grading
+                    existing = await db.execute(
+                        select(Grading).where(Grading.answer_id == answer_id)
+                    )
+                    grading = existing.scalar_one_or_none()
 
-    await db.commit()
+                    if grading is None:
+                        grading = Grading(
+                            answer_id=answer_id,
+                            score=float(result.get("score", 0)),
+                            matched_criteria_ids=result.get("matched_criteria_ids"),
+                            rationale=result.get("rationale"),
+                            graded_by="auto",
+                            rubric_version=question.rubric_version,
+                        )
+                        db.add(grading)
+                    else:
+                        grading.score = float(result.get("score", 0))
+                        grading.matched_criteria_ids = result.get("matched_criteria_ids")
+                        grading.rationale = result.get("rationale")
+                        grading.graded_by = "auto"
+                        grading.rubric_version = question.rubric_version
+                        grading.updated_at = datetime.now(timezone.utc)
 
-    return {
-        "region_id": region_id,
-        "question_number": region.question_number,
-        "total_processed": len(results),
-        "ambiguous_count": ambiguous_count,
-        "results": results,
-    }
+            exam.status = "graded"
+            await db.commit()
+            logger.info(f"Grading done for exam {exam_id}")
+
+        except Exception as exc:
+            logger.exception(f"Grading failed for exam {exam_id}: {exc}")

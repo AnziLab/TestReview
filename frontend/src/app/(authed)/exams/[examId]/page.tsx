@@ -1,0 +1,122 @@
+'use client'
+
+import { use } from 'react'
+import Link from 'next/link'
+import useSWR from 'swr'
+import { examsApi, questionsApi, classesApi } from '@/lib/api/exams'
+import type { Exam } from '@/lib/types'
+
+const stepDefs = [
+  {
+    key: 'rubric',
+    label: '채점기준표',
+    desc: '문항별 채점기준 설정',
+    path: '/rubric',
+    doneStatuses: ['rubric_ready', 'answers_uploaded', 'rubric_refined', 'graded'] as Exam['status'][],
+  },
+  {
+    key: 'classes',
+    label: '학생 답안 업로드',
+    desc: '학급별 OCR 처리',
+    path: '/classes',
+    doneStatuses: ['answers_uploaded', 'rubric_refined', 'graded'] as Exam['status'][],
+  },
+  {
+    key: 'refine',
+    label: '채점기준 정제',
+    desc: '클러스터 분석 후 기준 완성',
+    path: '/refine',
+    doneStatuses: ['rubric_refined', 'graded'] as Exam['status'][],
+  },
+  {
+    key: 'grading',
+    label: '채점',
+    desc: '일괄 채점 및 결과 확인',
+    path: '/grading',
+    doneStatuses: ['graded'] as Exam['status'][],
+  },
+]
+
+export default function ExamHubPage({
+  params,
+}: {
+  params: Promise<{ examId: string }>
+}) {
+  const { examId } = use(params)
+  const { data: exam } = useSWR(`exams/${examId}`, () => examsApi.get(Number(examId)))
+  const { data: questions } = useSWR(`exams/${examId}/questions`, () => questionsApi.list(Number(examId)))
+  const { data: classes } = useSWR(`exams/${examId}/classes`, () => classesApi.list(Number(examId)))
+
+  if (!exam) return null
+
+  const currentStepIdx = stepDefs.findIndex(
+    (s) => !s.doneStatuses.includes(exam.status)
+  )
+  const activeIdx = currentStepIdx === -1 ? stepDefs.length - 1 : currentStepIdx
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto w-full">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">{exam.title}</h1>
+        {exam.subject && (
+          <p className="text-gray-500 text-sm mt-1">{exam.subject}{exam.grade ? ` · ${exam.grade}학년` : ''}</p>
+        )}
+      </div>
+
+      <div className="grid gap-4">
+        {stepDefs.map((step, idx) => {
+          const isDone = step.doneStatuses.includes(exam.status)
+          const isActive = idx === activeIdx
+          const isLocked = idx > activeIdx && !isDone
+
+          return (
+            <Link
+              key={step.key}
+              href={`/exams/${examId}${step.path}`}
+              className={`bg-white rounded-lg shadow-sm border p-5 flex items-center gap-4 transition-colors ${
+                isLocked
+                  ? 'border-gray-200 opacity-50 cursor-not-allowed pointer-events-none'
+                  : isActive
+                  ? 'border-blue-400 hover:bg-blue-50'
+                  : 'border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                isDone
+                  ? 'bg-green-100 text-green-700'
+                  : isActive
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-500'
+              }`}>
+                {isDone ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <span className="font-bold text-sm">{idx + 1}</span>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className={`font-medium ${isActive ? 'text-blue-700' : 'text-gray-800'}`}>{step.label}</p>
+                <p className="text-sm text-gray-500">{step.desc}</p>
+                {step.key === 'rubric' && questions && (
+                  <p className="text-xs text-gray-400 mt-0.5">{questions.length}개 문항</p>
+                )}
+                {step.key === 'classes' && classes && (
+                  <p className="text-xs text-gray-400 mt-0.5">{classes.length}개 반</p>
+                )}
+              </div>
+              {isActive && (
+                <span className="text-blue-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
+              )}
+            </Link>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
