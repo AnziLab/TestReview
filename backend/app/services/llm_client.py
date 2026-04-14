@@ -1,11 +1,11 @@
 import asyncio
 import base64
-import io
 import json
 import re
 from typing import Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 
 class GeminiClient:
@@ -14,7 +14,7 @@ class GeminiClient:
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
         self.api_key = api_key
         self.model = model
-        genai.configure(api_key=api_key)
+        self._client = genai.Client(api_key=api_key)
 
     # ─── Public helpers ───────────────────────────────────────────────────────
 
@@ -55,7 +55,6 @@ class GeminiClient:
         if not regions:
             return []
 
-
         # Build a numbered list of regions with their coordinates for the prompt
         region_lines = []
         for i, r in enumerate(regions, start=1):
@@ -76,12 +75,13 @@ class GeminiClient:
             "JSON만 반환하고 다른 설명은 추가하지 마세요."
         )
 
-        # Encode image inline as base64
         b64_data = base64.standard_b64encode(image_bytes).decode("utf-8")
-        image_part = {"mime_type": "image/png", "data": b64_data}
+        image_part = types.Part.from_bytes(data=b64_data, mime_type="image/png")
 
-        model = genai.GenerativeModel(self.model)
-        response = model.generate_content([image_part, prompt])
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=[image_part, prompt],
+        )
         raw = response.text.strip()
 
         # Parse JSON response
@@ -107,8 +107,10 @@ class GeminiClient:
         return results
 
     def _text_request_sync(self, prompt: str) -> str:
-        model = genai.GenerativeModel(self.model)
-        response = model.generate_content(prompt)
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+        )
         return response.text.strip()
 
     # ─── Prompt & response parsing ────────────────────────────────────────────
@@ -153,7 +155,6 @@ JSON만 반환하고 다른 설명은 추가하지 마세요."""
     @staticmethod
     def _parse_grading_response(raw: str, max_score: float) -> dict:
         """Parse LLM grading response, with fallback for malformed JSON."""
-        # Strip markdown code fences if present
         text = raw.strip()
         if text.startswith("```"):
             text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
@@ -171,7 +172,6 @@ JSON만 반환하고 다른 설명은 추가하지 마세요."""
                 "ambiguity_reason": data.get("ambiguity_reason") or None,
             }
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            # Best-effort extraction
             score_match = re.search(r'"score"\s*:\s*([0-9.]+)', text)
             ambiguous_match = re.search(r'"is_ambiguous"\s*:\s*(true|false)', text, re.IGNORECASE)
             reason_match = re.search(r'"ambiguity_reason"\s*:\s*"([^"]*)"', text)
