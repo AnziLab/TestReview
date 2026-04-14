@@ -190,25 +190,61 @@ async def detect_regions_gemini(image_bytes: bytes, api_key: str, model: str = "
             widths.sort(key=lambda x: -x[1])
             answer_cols = [widths[0][0]] if widths else []
 
+        img_gray = Image.open(io.BytesIO(image_bytes)).convert("L")
+        scale_w = img_gray.width / img_w
+        scale_h = img_gray.height / img_h
+        if max(img_gray.width, img_gray.height) > 1200:
+            sc = 1200 / max(img_gray.width, img_gray.height)
+            img_gray = img_gray.resize((int(img_gray.width * sc), int(img_gray.height * sc)), Image.LANCZOS)
+        gray_w, gray_h = img_gray.size
+        gray_pixels = list(img_gray.getdata())
+
         regions = []
         for row_i in range(len(h_lines) - 1):
             y1 = h_lines[row_i]
             y2 = h_lines[row_i + 1]
             row_h = y2 - y1
-            # Skip very thin rows (likely just decorative lines, not cells)
             if row_h < img_h * 0.01:
                 continue
+
             for col_i in answer_cols:
                 if col_i >= len(v_lines) - 1:
                     continue
                 x1 = v_lines[col_i]
                 x2 = v_lines[col_i + 1]
-                regions.append({
-                    "x": round(x1 / img_w, 4),
-                    "y": round(y1 / img_h, 4),
-                    "width": round((x2 - x1) / img_w, 4),
-                    "height": round((y2 - y1) / img_h, 4),
-                })
+                cell_w = x2 - x1
+
+                # Secondary vertical projection inside this cell to detect sub-dividers
+                sub_profile = [0] * cell_w
+                for cy in range(y1, y2):
+                    for cx in range(x1, x2):
+                        idx = cy * img_w + cx
+                        if idx < len(gray_pixels) and gray_pixels[idx] < 160:
+                            sub_profile[cx - x1] += 1
+
+                # Find internal vertical lines (must span >60% of cell height)
+                sub_lines = _find_lines(sub_profile, row_h, min_ratio=0.6)
+
+                # Build sub-column boundaries
+                sub_x_boundaries = [x1] + [x1 + s for s in sub_lines] + [x2]
+                # Deduplicate and remove boundaries too close to each other
+                merged = [sub_x_boundaries[0]]
+                for bx in sub_x_boundaries[1:]:
+                    if bx - merged[-1] > cell_w * 0.05:
+                        merged.append(bx)
+                sub_x_boundaries = merged
+
+                for si in range(len(sub_x_boundaries) - 1):
+                    sx1 = sub_x_boundaries[si]
+                    sx2 = sub_x_boundaries[si + 1]
+                    if (sx2 - sx1) < img_w * 0.02:
+                        continue
+                    regions.append({
+                        "x": round(sx1 / img_w, 4),
+                        "y": round(y1 / img_h, 4),
+                        "width": round((sx2 - sx1) / img_w, 4),
+                        "height": round(row_h / img_h, 4),
+                    })
 
         return regions
 
