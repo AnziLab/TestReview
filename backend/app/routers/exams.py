@@ -9,14 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import UPLOADS_DIR
 from app.database import get_db
-from app.models.models import Exam, AnswerSheet
+from app.models.models import Exam, AnswerSheet, Settings
 from app.schemas.schemas import (
     ExamCreate,
     ExamResponse,
     AnswerSheetResponse,
     DetectedRegion,
 )
-from app.services.image_processing import detect_cells
+from app.services.image_processing import detect_regions_gemini
 
 router = APIRouter(tags=["exams"])
 
@@ -186,8 +186,19 @@ async def detect_regions_endpoint(
     from app.config import BASE_DIR
     full_path = str(BASE_DIR / sheet.image_path)
 
+    settings_result = await db.execute(select(Settings).limit(1))
+    settings = settings_result.scalar_one_or_none()
+    if not settings or not settings.gemini_api_key:
+        raise HTTPException(status_code=400, detail="Gemini API 키가 설정되지 않았습니다. 설정 페이지에서 입력해주세요.")
+
     try:
-        cells = detect_cells(full_path)
+        with open(full_path, "rb") as f:
+            image_bytes = f.read()
+        cells = await detect_regions_gemini(
+            image_bytes,
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model or "gemini-2.0-flash",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"영역 감지 실패: {str(e)}")
 
