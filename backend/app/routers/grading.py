@@ -84,7 +84,7 @@ async def grading_summary(exam_id: str, db: AsyncSession = Depends(get_db)):
                 total_students=len(answers),
                 graded_count=len(graded),
                 ambiguous_count=len(ambiguous),
-                avg_score=round(sum(scores) / len(scores), 2) if scores else None,
+                average_score=round(sum(scores) / len(scores), 2) if scores else None,
                 max_score=region.max_score,
             )
         )

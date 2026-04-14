@@ -5,18 +5,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.models import Region, StudentAnswer, Settings
-from app.services.llm_client import LLMClient
+from app.services.llm_client import GeminiClient
 
 
-async def _get_llm_client(db: AsyncSession) -> LLMClient:
+async def _get_llm_client(db: AsyncSession) -> GeminiClient:
     result = await db.execute(select(Settings).limit(1))
     settings = result.scalar_one_or_none()
-    if settings is None or not settings.llm_api_key:
-        raise ValueError("LLM 설정이 구성되지 않았습니다. 설정 페이지에서 API 키를 입력해주세요.")
-    return LLMClient(
-        provider=settings.llm_provider,
-        api_key=settings.llm_api_key,
-        model=settings.llm_model or None,
+    if settings is None or not settings.gemini_api_key:
+        raise ValueError("Gemini API 키가 설정되지 않았습니다. 설정 페이지에서 API 키를 입력해주세요.")
+    return GeminiClient(
+        api_key=settings.gemini_api_key,
+        model=settings.gemini_model or "gemini-2.0-flash",
     )
 
 

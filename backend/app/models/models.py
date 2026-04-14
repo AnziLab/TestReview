@@ -120,12 +120,7 @@ class Settings(Base):
     __tablename__ = "settings"
 
     id = Column(String, primary_key=True, default=_new_uuid)
-    llm_provider = Column(String, nullable=False, default="anthropic")
-    llm_api_key = Column(String, nullable=True)
-    llm_model = Column(String, nullable=True)
-    ocr_provider = Column(String(50), default="gpt")  # "gpt" or "clova"
-    ocr_model = Column(String(100), nullable=True)  # e.g. "gpt-5.4-nano"
-    clova_api_url = Column(String(500), nullable=True)
-    clova_secret_key = Column(String(500), nullable=True)
+    gemini_api_key = Column(String, nullable=True)
+    gemini_model = Column(String, nullable=True, default="gemini-2.0-flash")
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)

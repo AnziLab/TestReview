@@ -7,26 +7,16 @@ from pydantic import BaseModel, ConfigDict
 # ─── Settings ────────────────────────────────────────────────────────────────
 
 class SettingsUpdate(BaseModel):
-    llm_provider: str
-    llm_api_key: str
-    llm_model: str
-    ocr_provider: Optional[str] = None
-    ocr_model: Optional[str] = None
-    clova_api_url: Optional[str] = None
-    clova_secret_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    gemini_model: Optional[str] = None
 
 
 class SettingsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    llm_provider: str
-    llm_api_key_masked: Optional[str] = None
-    llm_model: Optional[str]
-    ocr_provider: Optional[str] = None
-    ocr_model: Optional[str] = None
-    clova_api_url: Optional[str] = None
-    clova_secret_key_masked: Optional[str] = None
+    gemini_api_key_masked: Optional[str] = None
+    gemini_model: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -178,7 +168,7 @@ class GradingRegionSummary(BaseModel):
     total_students: int
     graded_count: int
     ambiguous_count: int
-    avg_score: Optional[float]
+    average_score: Optional[float]
     max_score: float
 
 

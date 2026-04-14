@@ -68,15 +68,11 @@ export interface GradingSummary {
 }
 
 export interface Settings {
-  // Grading LLM
-  llm_provider: string;
-  llm_api_key_masked: string;
-  llm_model: string;
-  // OCR settings
-  ocr_provider: string;
-  ocr_model: string | null;
-  clova_api_url: string | null;
-  clova_secret_key_masked: string | null;
+  id: string;
+  gemini_api_key_masked?: string | null;
+  gemini_model?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // For region drawing in the UI (before saving)

@@ -1,17 +1,12 @@
-import base64
-import io
-import json
 import uuid
 from datetime import datetime
-from typing import Optional
 
-import httpx
-from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.models import AnswerSheet, Region, Settings, Student, StudentAnswer, StudentPage
+from app.services.llm_client import GeminiClient
 
 
 # ─── Base OCR Engine ─────────────────────────────────────────────────────────
@@ -35,187 +30,16 @@ class OCREngine:
         raise NotImplementedError
 
 
-# ─── GPT OCR Engine ──────────────────────────────────────────────────────────
+# ─── Gemini OCR Engine ───────────────────────────────────────────────────────
 
-class GPTOCREngine(OCREngine):
-    """Uses GPT multimodal API for OCR (one API call per page, all regions at once)."""
+class GeminiOCREngine(OCREngine):
+    """Uses Google Gemini multimodal API for OCR (one API call per page, all regions at once)."""
 
-    def __init__(self, api_key: str, model: str = "gpt-5.4-nano"):
-        self.api_key = api_key
-        self.model = model
-
-    async def recognize(self, image_bytes: bytes, regions: list[dict]) -> list[dict]:
-        try:
-            from openai import AsyncOpenAI
-        except ImportError:
-            raise RuntimeError("openai package is not installed.")
-
-        if not regions:
-            return []
-
-        b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
-        data_url = f"data:image/png;base64,{b64}"
-
-        # Build a numbered list of regions with their coordinates for the prompt
-        region_lines = []
-        for i, r in enumerate(regions, start=1):
-            region_lines.append(
-                f"{i}. 문항 '{r['question_number']}' "
-                f"(x={r['x']:.4f}, y={r['y']:.4f}, "
-                f"w={r['width']:.4f}, h={r['height']:.4f})"
-            )
-        region_desc = "\n".join(region_lines)
-
-        prompt = (
-            "이 시험지 이미지에서 아래에 나열된 각 답안 영역의 손글씨를 읽어주세요. "
-            "좌표는 이미지 크기 대비 비율(0.0~1.0)입니다. "
-            "각 영역의 텍스트만 반환하고, 정확히 다음 JSON 형식으로 응답해주세요:\n"
-            '{"results": [{"index": 1, "text": "..."}, {"index": 2, "text": "..."}, ...]}\n\n'
-            "영역 목록:\n" + region_desc + "\n\n"
-            "텍스트를 읽을 수 없는 경우 해당 영역의 text를 빈 문자열로 반환하세요. "
-            "JSON만 반환하고 다른 설명은 추가하지 마세요."
-        )
-
-        client = AsyncOpenAI(api_key=self.api_key)
-        response = await client.chat.completions.create(
-            model=self.model,
-            max_tokens=2048,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": data_url, "detail": "high"},
-                        },
-                    ],
-                }
-            ],
-        )
-
-        raw = response.choices[0].message.content.strip()
-
-        # Parse JSON response
-        try:
-            # Strip markdown fences if present
-            if raw.startswith("```"):
-                import re
-                raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
-                raw = re.sub(r"\n?```$", "", raw)
-                raw = raw.strip()
-            data = json.loads(raw)
-            index_to_text = {item["index"]: item.get("text", "") for item in data.get("results", [])}
-        except (json.JSONDecodeError, KeyError, TypeError):
-            index_to_text = {}
-
-        results = []
-        for i, r in enumerate(regions, start=1):
-            text = index_to_text.get(i, "")
-            results.append({
-                "region_id": r["id"],
-                "text": text,
-                "confidence": 0.9 if text else 0.0,
-            })
-
-        return results
-
-
-# ─── Clova OCR Engine ────────────────────────────────────────────────────────
-
-class ClovaOCREngine(OCREngine):
-    """Uses Naver Clova OCR API."""
-
-    def __init__(self, api_url: str, secret_key: str):
-        self.api_url = api_url
-        self.secret_key = secret_key
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
+        self._client = GeminiClient(api_key=api_key, model=model)
 
     async def recognize(self, image_bytes: bytes, regions: list[dict]) -> list[dict]:
-        if not regions:
-            return []
-
-        b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
-
-        request_body = {
-            "version": "V2",
-            "requestId": str(uuid.uuid4()),
-            "timestamp": int(datetime.utcnow().timestamp() * 1000),
-            "images": [
-                {
-                    "format": "png",
-                    "name": "page",
-                    "data": b64,
-                }
-            ],
-        }
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                self.api_url,
-                headers={
-                    "X-OCR-SECRET": self.secret_key,
-                    "Content-Type": "application/json",
-                },
-                json=request_body,
-            )
-            response.raise_for_status()
-            clova_data = response.json()
-
-        # Extract all text fields with their bounding boxes from Clova response
-        clova_fields = []
-        for image_result in clova_data.get("images", []):
-            for field in image_result.get("fields", []):
-                bounding_poly = field.get("boundingPoly", {})
-                vertices = bounding_poly.get("vertices", [])
-                if len(vertices) >= 4:
-                    xs = [v.get("x", 0) for v in vertices]
-                    ys = [v.get("y", 0) for v in vertices]
-                    # Store as fractional coordinates — we need image dimensions for that.
-                    # Clova returns pixel coords; we store raw and match below.
-                    clova_fields.append({
-                        "text": field.get("inferText", ""),
-                        "confidence": field.get("inferConfidence", 0.0),
-                        "min_x": min(xs),
-                        "min_y": min(ys),
-                        "max_x": max(xs),
-                        "max_y": max(ys),
-                    })
-
-        # We need the image dimensions to convert our region fractions to pixels
-        try:
-            img = Image.open(io.BytesIO(image_bytes))
-            img_w, img_h = img.size
-        except Exception:
-            img_w, img_h = 1, 1  # fallback — coordinates will be wrong but won't crash
-
-        results = []
-        for r in regions:
-            # Convert fractional region to pixel bbox
-            rx1 = r["x"] * img_w
-            ry1 = r["y"] * img_h
-            rx2 = (r["x"] + r["width"]) * img_w
-            ry2 = (r["y"] + r["height"]) * img_h
-
-            # Collect all Clova text fields whose centre falls within this region
-            matching_texts = []
-            matching_confs = []
-            for cf in clova_fields:
-                cx = (cf["min_x"] + cf["max_x"]) / 2
-                cy = (cf["min_y"] + cf["max_y"]) / 2
-                if rx1 <= cx <= rx2 and ry1 <= cy <= ry2:
-                    matching_texts.append(cf["text"])
-                    matching_confs.append(cf["confidence"])
-
-            combined_text = " ".join(matching_texts)
-            avg_conf = sum(matching_confs) / len(matching_confs) if matching_confs else 0.0
-
-            results.append({
-                "region_id": r["id"],
-                "text": combined_text,
-                "confidence": round(avg_conf, 4),
-            })
-
-        return results
+        return await self._client.recognize_handwriting(image_bytes, regions)
 
 
 # ─── OCR correction helper ───────────────────────────────────────────────────
@@ -244,30 +68,17 @@ async def save_ocr_correction(
 # ─── Settings helper ─────────────────────────────────────────────────────────
 
 async def _get_ocr_engine(db: AsyncSession) -> OCREngine:
-    """Read settings and return the appropriate OCR engine."""
+    """Read settings and return the Gemini OCR engine."""
     result = await db.execute(select(Settings).limit(1))
     settings = result.scalar_one_or_none()
 
-    if settings is None:
-        raise ValueError("OCR 설정이 구성되지 않았습니다. 설정 페이지에서 API 키를 입력해주세요.")
+    if settings is None or not settings.gemini_api_key:
+        raise ValueError("Gemini API 키가 설정되지 않았습니다. 설정 페이지에서 API 키를 입력해주세요.")
 
-    provider = (settings.ocr_provider or "gpt").lower()
-
-    if provider == "clova":
-        if not settings.clova_api_url or not settings.clova_secret_key:
-            raise ValueError("Clova OCR 설정이 불완전합니다. API URL과 Secret Key를 입력해주세요.")
-        return ClovaOCREngine(
-            api_url=settings.clova_api_url,
-            secret_key=settings.clova_secret_key,
-        )
-    else:
-        # Default: GPT OCR
-        if not settings.llm_api_key and not settings.ocr_model:
-            raise ValueError("GPT OCR 설정이 구성되지 않았습니다. API 키를 입력해주세요.")
-        # Use llm_api_key for GPT OCR (same OpenAI account)
-        api_key = settings.llm_api_key or ""
-        model = settings.ocr_model or "gpt-5.4-nano"
-        return GPTOCREngine(api_key=api_key, model=model)
+    return GeminiOCREngine(
+        api_key=settings.gemini_api_key,
+        model=settings.gemini_model or "gemini-2.0-flash",
+    )
 
 
 # ─── Main OCR pipeline ────────────────────────────────────────────────────────

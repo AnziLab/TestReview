@@ -1,46 +1,30 @@
+import asyncio
 import base64
+import io
 import json
 import re
 from typing import Optional
 
-from fastapi import HTTPException
+import google.generativeai as genai
 
 
-class LLMClient:
-    """Abstraction over Anthropic and OpenAI multimodal APIs."""
+class GeminiClient:
+    """Google Gemini multimodal API client for OCR and grading."""
 
-    def __init__(self, provider: str, api_key: str, model: Optional[str] = None):
-        """
-        provider: 'anthropic' or 'openai'
-        api_key:  the raw API key
-        model:    model name override; if None a sensible default is chosen
-        """
-        self.provider = provider.lower()
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
         self.api_key = api_key
-
-        if self.provider == "anthropic":
-            self.model = model or "claude-opus-4-5"
-        elif self.provider == "openai":
-            self.model = model or "gpt-5.4-nano"
-        else:
-            raise ValueError(f"Unsupported LLM provider: {provider}")
+        self.model = model
+        genai.configure(api_key=api_key)
 
     # ─── Public helpers ───────────────────────────────────────────────────────
 
-    async def recognize_handwriting(self, image_bytes: bytes, mime_type: str = "image/png") -> str:
+    async def recognize_handwriting(self, image_bytes: bytes, regions: list[dict]) -> list[dict]:
         """
-        Send a cropped answer-region image to the multimodal LLM.
-        Returns the recognized text (OCR result).
+        Send full page image + region coords to Gemini, return [{region_id, text, confidence}].
+        One API call per page with all regions listed by coordinate.
         """
-        prompt = (
-            "이 이미지에 있는 손글씨를 정확하게 읽어주세요. "
-            "텍스트만 반환해주세요. 추가 설명 없이 손글씨 내용만 반환하세요."
-        )
-
-        if self.provider == "anthropic":
-            return await self._anthropic_image_request(image_bytes, mime_type, prompt)
-        else:
-            return await self._openai_image_request(image_bytes, mime_type, prompt)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._recognize_handwriting_sync, image_bytes, regions)
 
     async def evaluate_answer(
         self,
@@ -61,108 +45,71 @@ class LLMClient:
             }
         """
         prompt = self._build_grading_prompt(student_answer, model_answer, rubric, max_score)
-
-        if self.provider == "anthropic":
-            raw = await self._anthropic_text_request(prompt)
-        else:
-            raw = await self._openai_text_request(prompt)
-
+        loop = asyncio.get_running_loop()
+        raw = await loop.run_in_executor(None, self._text_request_sync, prompt)
         return self._parse_grading_response(raw, max_score)
 
-    # ─── Anthropic implementation ─────────────────────────────────────────────
+    # ─── Sync implementations (wrapped in executor) ───────────────────────────
 
-    async def _anthropic_image_request(
-        self, image_bytes: bytes, mime_type: str, prompt: str
-    ) -> str:
-        try:
-            import anthropic
-        except ImportError:
-            raise HTTPException(status_code=500, detail="anthropic package not installed")
+    def _recognize_handwriting_sync(self, image_bytes: bytes, regions: list[dict]) -> list[dict]:
+        if not regions:
+            return []
 
-        b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
-        client = anthropic.AsyncAnthropic(api_key=self.api_key)
-        message = await client.messages.create(
-            model=self.model,
-            max_tokens=1024,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": mime_type,
-                                "data": b64,
-                            },
-                        },
-                        {"type": "text", "text": prompt},
-                    ],
-                }
-            ],
+        # Build a numbered list of regions with their coordinates for the prompt
+        region_lines = []
+        for i, r in enumerate(regions, start=1):
+            region_lines.append(
+                f"{i}. 문항 '{r['question_number']}' "
+                f"(x={r['x']:.4f}, y={r['y']:.4f}, "
+                f"w={r['width']:.4f}, h={r['height']:.4f})"
+            )
+        region_desc = "\n".join(region_lines)
+
+        prompt = (
+            "이 시험지 이미지에서 아래에 나열된 각 답안 영역의 손글씨를 읽어주세요. "
+            "좌표는 이미지 크기 대비 비율(0.0~1.0)입니다. "
+            "각 영역의 텍스트만 반환하고, 정확히 다음 JSON 형식으로 응답해주세요:\n"
+            '{"results": [{"index": 1, "text": "..."}, {"index": 2, "text": "..."}, ...]}\n\n'
+            "영역 목록:\n" + region_desc + "\n\n"
+            "텍스트를 읽을 수 없는 경우 해당 영역의 text를 빈 문자열로 반환하세요. "
+            "JSON만 반환하고 다른 설명은 추가하지 마세요."
         )
-        return message.content[0].text.strip()
 
-    async def _anthropic_text_request(self, prompt: str) -> str:
+        # Encode image inline as base64
+        b64_data = base64.standard_b64encode(image_bytes).decode("utf-8")
+        image_part = {"mime_type": "image/png", "data": b64_data}
+
+        model = genai.GenerativeModel(self.model)
+        response = model.generate_content([image_part, prompt])
+        raw = response.text.strip()
+
+        # Parse JSON response
         try:
-            import anthropic
-        except ImportError:
-            raise HTTPException(status_code=500, detail="anthropic package not installed")
+            if raw.startswith("```"):
+                raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
+                raw = re.sub(r"\n?```$", "", raw)
+                raw = raw.strip()
+            data = json.loads(raw)
+            index_to_text = {item["index"]: item.get("text", "") for item in data.get("results", [])}
+        except (json.JSONDecodeError, KeyError, TypeError):
+            index_to_text = {}
 
-        client = anthropic.AsyncAnthropic(api_key=self.api_key)
-        message = await client.messages.create(
-            model=self.model,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return message.content[0].text.strip()
+        results = []
+        for i, r in enumerate(regions, start=1):
+            text = index_to_text.get(i, "")
+            results.append({
+                "region_id": r["id"],
+                "text": text,
+                "confidence": 0.9 if text else 0.0,
+            })
 
-    # ─── OpenAI implementation ────────────────────────────────────────────────
+        return results
 
-    async def _openai_image_request(
-        self, image_bytes: bytes, mime_type: str, prompt: str
-    ) -> str:
-        try:
-            from openai import AsyncOpenAI
-        except ImportError:
-            raise HTTPException(status_code=500, detail="openai package not installed")
-
-        b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
-        data_url = f"data:{mime_type};base64,{b64}"
-
-        client = AsyncOpenAI(api_key=self.api_key)
-        response = await client.chat.completions.create(
-            model=self.model,
-            max_tokens=1024,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": data_url, "detail": "high"},
-                        },
-                    ],
-                }
-            ],
-        )
-        return response.choices[0].message.content.strip()
-
-    async def _openai_text_request(self, prompt: str) -> str:
-        try:
-            from openai import AsyncOpenAI
-        except ImportError:
-            raise HTTPException(status_code=500, detail="openai package not installed")
-
-        client = AsyncOpenAI(api_key=self.api_key)
-        response = await client.chat.completions.create(
-            model=self.model,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.choices[0].message.content.strip()
+    def _text_request_sync(self, prompt: str) -> str:
+        model = genai.GenerativeModel(self.model)
+        response = model.generate_content(prompt)
+        return response.text.strip()
 
     # ─── Prompt & response parsing ────────────────────────────────────────────
 

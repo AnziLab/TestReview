@@ -31,15 +31,7 @@ export async function getSettings(): Promise<Settings> {
   return handleResponse<Settings>(res);
 }
 
-export async function updateSettings(payload: {
-  llm_provider: string;
-  llm_api_key?: string;
-  llm_model: string;
-  ocr_provider: string;
-  ocr_model?: string;
-  clova_api_url?: string;
-  clova_secret_key?: string;
-}): Promise<Settings> {
+export async function updateSettings(payload: { gemini_api_key?: string; gemini_model?: string }): Promise<Settings> {
   const res = await fetch(`${BASE_URL}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
