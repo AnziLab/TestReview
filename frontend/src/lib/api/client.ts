@@ -73,11 +73,19 @@ export async function apiFetch<T>(
     let message = text
     try {
       const json = JSON.parse(text)
-      message = json.detail || json.message || text
+      if (Array.isArray(json.detail)) {
+        // FastAPI validation errors: [{loc, msg, type}, ...]
+        message = json.detail.map((e: { msg?: string; loc?: string[] }) => {
+          const field = e.loc ? e.loc.slice(-1)[0] : ''
+          return field ? `${field}: ${e.msg}` : e.msg
+        }).join(', ')
+      } else {
+        message = json.detail || json.message || text
+      }
     } catch {
       // use raw text
     }
-    throw new Error(message)
+    throw new Error(String(message))
   }
 
   if (res.status === 204) return undefined as T

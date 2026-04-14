@@ -114,12 +114,13 @@ async def commit_rubric_draft(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Promote rubric_draft_json → rubric_json and increment version."""
+    """Promote rubric_draft_json → rubric_json and increment version.
+    draft가 없으면 현재 rubric_json을 그대로 확정(버전만 증가)."""
     question = await _get_question_owned(question_id, current_user.id, db)
-    if question.rubric_draft_json is None:
-        raise HTTPException(status_code=400, detail="No draft to commit")
-    question.rubric_json = question.rubric_draft_json
-    question.rubric_draft_json = None
+    if question.rubric_draft_json is not None:
+        question.rubric_json = question.rubric_draft_json
+        question.rubric_draft_json = None
+    # draft 없으면 현재 rubric_json 유지, 버전만 증가
     question.rubric_version += 1
     await db.commit()
     await db.refresh(question)

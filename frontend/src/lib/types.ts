@@ -14,6 +14,7 @@ export interface Exam {
   title: string
   subject?: string
   grade?: number
+  school_level?: 'elementary' | 'middle' | 'high'
   status: 'draft' | 'rubric_ready' | 'answers_uploaded' | 'rubric_refined' | 'graded'
   question_count?: number
   created_at: string
@@ -34,7 +35,7 @@ export interface Question {
 }
 
 export interface RubricJson {
-  criteria: Array<{ id: string; description: string; points: number }>
+  criteria: Array<{ id?: string; description: string; points: number }>
   notes: string
 }
 

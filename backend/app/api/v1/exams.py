@@ -153,23 +153,47 @@ async def upload_rubric_file(
     }
 
 
-@router.get("/{exam_id}/rubric-extraction", response_model=RubricExtractionStatus)
+@router.get("/{exam_id}/rubric-extraction")
 async def rubric_extraction_status(
     exam_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     exam = await _get_exam_owned(exam_id, current_user.id, db)
-    count_result = await db.execute(
-        select(func.count()).select_from(Question).where(Question.exam_id == exam_id)
+
+    questions_result = await db.execute(
+        select(Question).where(Question.exam_id == exam_id).order_by(Question.order_index)
     )
-    questions_count = count_result.scalar_one()
-    return RubricExtractionStatus(
-        exam_id=exam_id,
-        status=exam.status,
-        rubric_source_filename=exam.rubric_source_filename,
-        questions_count=questions_count,
-    )
+    questions = questions_result.scalars().all()
+
+    # 프론트가 기대하는 status: pending | processing | done | failed
+    if exam.status == "rubric_ready":
+        ext_status = "done"
+    elif exam.status == "rubric_failed":
+        ext_status = "failed"
+    elif exam.rubric_source_filename and exam.status == "draft":
+        ext_status = "processing"
+    else:
+        ext_status = "pending"
+
+    return {
+        "exam_id": exam_id,
+        "status": ext_status,
+        "rubric_source_filename": exam.rubric_source_filename,
+        "questions_count": len(questions),
+        "questions": [
+            {
+                "id": q.id,
+                "number": q.number,
+                "question_text": q.question_text,
+                "max_score": float(q.max_score),
+                "model_answer": q.model_answer,
+                "rubric_json": q.rubric_json,
+                "rubric_version": q.rubric_version,
+            }
+            for q in questions
+        ] if ext_status == "done" else [],
+    }
 
 
 async def _get_exam_owned(exam_id: int, teacher_id: int, db: AsyncSession) -> Exam:

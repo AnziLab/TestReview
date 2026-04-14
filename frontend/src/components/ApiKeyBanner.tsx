@@ -1,11 +1,14 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/context/AuthContext'
 
 export function ApiKeyBanner() {
   const { user } = useAuth()
-  if (!user || user.has_api_key) return null
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted || !user || user.has_api_key) return null
 
   return (
     <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-2 flex items-center gap-2">

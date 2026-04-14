@@ -58,8 +58,8 @@ async def test_api_key(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="No API key configured")
     ok = await ping_gemini(current_user.gemini_api_key_encrypted)
     if not ok:
-        raise HTTPException(status_code=400, detail="API key validation failed")
-    return {"message": "API key is valid"}
+        return {"success": False, "message": "API 키가 유효하지 않습니다."}
+    return {"success": True, "message": "API 키가 유효합니다."}
 
 
 @router.put("/password")

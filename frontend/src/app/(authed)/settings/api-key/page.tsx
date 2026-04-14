@@ -4,6 +4,7 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { useForm } from 'react-hook-form'
 import { meApi } from '@/lib/api/exams'
+import { useAuth } from '@/lib/context/AuthContext'
 
 interface FormData {
   api_key: string
@@ -11,6 +12,7 @@ interface FormData {
 
 export default function ApiKeySettingsPage() {
   const { data, isLoading, mutate } = useSWR('me/api-key', () => meApi.getApiKey())
+  const { refreshUser } = useAuth()
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -21,7 +23,7 @@ export default function ApiKeySettingsPage() {
     try {
       await meApi.setApiKey(formData.api_key)
       reset()
-      mutate()
+      await Promise.all([mutate(), refreshUser()])
       setTestResult(null)
     } catch (e) {
       setError('api_key', { message: e instanceof Error ? e.message : '저장 실패' })

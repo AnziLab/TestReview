@@ -65,7 +65,7 @@ async def _call_gemini_for_student(
 
     response = await asyncio.to_thread(
         client.models.generate_content,
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=parts,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",

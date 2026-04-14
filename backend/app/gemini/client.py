@@ -12,11 +12,16 @@ def get_gemini_client(encrypted_api_key: str) -> genai.Client:
 
 
 async def ping_gemini(encrypted_api_key: str) -> bool:
-    """Return True if the API key is valid (simple model list call)."""
+    """Return True if the API key is valid."""
     try:
         client = get_gemini_client(encrypted_api_key)
-        # A lightweight call: list models
-        await asyncio.to_thread(client.models.list)
-        return True
+        # generate_content with minimal input to verify the key actually works
+        def _ping():
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents="hi",
+            )
+            return response.text is not None
+        return await asyncio.to_thread(_ping)
     except Exception:
         return False

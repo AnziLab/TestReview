@@ -12,6 +12,7 @@ type Step = 1 | 2 | 3
 interface BasicForm {
   title: string
   subject: string
+  school_level: string
   grade: string
 }
 
@@ -50,6 +51,7 @@ export default function NewExamPage() {
     const created = await examsApi.create({
       title: data.title,
       subject: data.subject || undefined,
+      school_level: data.school_level || undefined,
       grade: data.grade ? Number(data.grade) : undefined,
     })
     setExam(created)
@@ -67,7 +69,8 @@ export default function NewExamPage() {
     setUploadError('')
     try {
       await examsApi.uploadRubricFile(exam.id, file)
-      setPollingUrl(`/exams/${exam.id}/extraction-status`)
+      setPollingUrl(`/exams/${exam.id}/rubric-extraction`)
+      setUploading(false)
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : '업로드 실패')
       setUploading(false)
@@ -98,7 +101,7 @@ export default function NewExamPage() {
     router.push(`/exams/${exam.id}`)
   }
 
-  const isExtracting = pollingUrl && extractionStatus && (extractionStatus.status === 'pending' || extractionStatus.status === 'processing')
+  const isExtracting = pollingUrl && (!extractionStatus || extractionStatus.status === 'pending' || extractionStatus.status === 'processing')
   const extractFailed = (extractionStatus?.status === 'failed') || pollingError
 
   return (
@@ -149,6 +152,18 @@ export default function NewExamPage() {
               />
             </div>
             <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">학교 급</label>
+              <select
+                className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                {...register('school_level')}
+              >
+                <option value="">선택</option>
+                <option value="elementary">초등학교</option>
+                <option value="middle">중학교</option>
+                <option value="high">고등학교</option>
+              </select>
+            </div>
+            <div>
               <label className="text-sm font-medium text-gray-700 block mb-1">학년</label>
               <select
                 className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -156,7 +171,7 @@ export default function NewExamPage() {
               >
                 <option value="">선택</option>
                 {[1, 2, 3, 4, 5, 6].map((g) => (
-                  <option key={g} value={g}>{g}학년</option>
+                  <option key={g} value={String(g)}>{g}학년</option>
                 ))}
               </select>
             </div>
@@ -193,13 +208,13 @@ export default function NewExamPage() {
                 ) : (
                   <>
                     <p className="text-sm text-gray-600">파일을 클릭하거나 드래그하여 업로드</p>
-                    <p className="text-xs text-gray-400 mt-1">PDF, HWPX 지원</p>
+                    <p className="text-xs text-gray-400 mt-1">PDF 지원</p>
                   </>
                 )}
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".pdf,.hwpx"
+                  accept=".pdf,application/pdf"
                   className="hidden"
                   onChange={handleFileChange}
                 />

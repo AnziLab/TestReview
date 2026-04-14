@@ -13,13 +13,25 @@ interface RubricEditorProps {
   onCommit?: () => void
 }
 
+function normalizeRubric(rubric: RubricJson): RubricJson {
+  return {
+    ...rubric,
+    notes: rubric.notes ?? '',
+    criteria: (rubric.criteria ?? []).map((c) => ({
+      ...c,
+      id: c.id || uuidv4(),
+      points: c.points ?? 0,
+    })),
+  }
+}
+
 export function RubricEditor({ questionId, initialRubric, onCommit }: RubricEditorProps) {
-  const [rubric, setRubric] = useState<RubricJson>(initialRubric)
+  const [rubric, setRubric] = useState<RubricJson>(() => normalizeRubric(initialRubric))
   const [committing, setCommitting] = useState(false)
   const { status, lastSavedAt } = useAutosave(questionId, rubric)
 
   useEffect(() => {
-    setRubric(initialRubric)
+    setRubric(normalizeRubric(initialRubric))
   }, [questionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateCriterion = (idx: number, field: 'description' | 'points', value: string | number) => {
@@ -78,7 +90,7 @@ export function RubricEditor({ questionId, initialRubric, onCommit }: RubricEdit
                 type="number"
                 className="border border-gray-300 rounded-lg px-3 py-2 w-20 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 placeholder="배점"
-                value={c.points}
+                value={c.points ?? 0}
                 min={0}
                 onChange={(e) => updateCriterion(idx, 'points', Number(e.target.value))}
               />

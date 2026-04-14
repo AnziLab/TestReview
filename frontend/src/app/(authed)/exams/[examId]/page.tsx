@@ -43,11 +43,19 @@ export default function ExamHubPage({
   params: Promise<{ examId: string }>
 }) {
   const { examId } = use(params)
-  const { data: exam } = useSWR(`exams/${examId}`, () => examsApi.get(Number(examId)))
-  const { data: questions } = useSWR(`exams/${examId}/questions`, () => questionsApi.list(Number(examId)))
-  const { data: classes } = useSWR(`exams/${examId}/classes`, () => classesApi.list(Number(examId)))
+  const numericId = Number(examId)
+  const { data: exam, error: examError } = useSWR(`exams/${numericId}`, () => examsApi.get(numericId))
+  const { data: questions } = useSWR(`exams/${numericId}/questions`, () => questionsApi.list(numericId))
+  const { data: classes } = useSWR(`exams/${numericId}/classes`, () => classesApi.list(numericId))
 
-  if (!exam) return null
+  if (examError) return (
+    <div className="p-6 text-center text-red-600">시험 정보를 불러오지 못했습니다.</div>
+  )
+  if (!exam) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="h-8 w-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+    </div>
+  )
 
   const currentStepIdx = stepDefs.findIndex(
     (s) => !s.doneStatuses.includes(exam.status)

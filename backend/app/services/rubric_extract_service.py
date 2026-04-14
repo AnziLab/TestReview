@@ -72,7 +72,7 @@ async def run_rubric_extraction(exam_id: int, file_path: str, teacher_id: int) -
             try:
                 exam = await db.get(Exam, exam_id)
                 if exam:
-                    exam.status = "draft"
+                    exam.status = "rubric_failed"
                     await db.commit()
             except Exception:
                 pass

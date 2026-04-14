@@ -6,7 +6,7 @@ export const examsApi = {
 
   get: (id: number) => apiFetch<Exam>(`/exams/${id}`),
 
-  create: (data: { title: string; subject?: string; grade?: number }) =>
+  create: (data: { title: string; subject?: string; grade?: number; school_level?: string }) =>
     apiFetch<Exam>('/exams', { method: 'POST', body: JSON.stringify(data) }),
 
   update: (id: number, data: Partial<Exam>) =>

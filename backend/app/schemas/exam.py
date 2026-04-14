@@ -6,15 +6,17 @@ from pydantic import BaseModel
 
 class ExamCreate(BaseModel):
     title: str
-    subject: str
-    grade: Optional[str] = None
+    subject: Optional[str] = None
+    grade: Optional[int] = None
+    school_level: Optional[str] = None  # elementary | middle | high
     description: Optional[str] = None
 
 
 class ExamUpdate(BaseModel):
     title: Optional[str] = None
     subject: Optional[str] = None
-    grade: Optional[str] = None
+    grade: Optional[int] = None
+    school_level: Optional[str] = None
     description: Optional[str] = None
 
 
@@ -22,8 +24,9 @@ class ExamOut(BaseModel):
     id: int
     teacher_id: int
     title: str
-    subject: str
-    grade: Optional[str] = None
+    subject: Optional[str] = None
+    grade: Optional[int] = None
+    school_level: Optional[str] = None
     description: Optional[str] = None
     rubric_source_filename: Optional[str] = None
     status: str
