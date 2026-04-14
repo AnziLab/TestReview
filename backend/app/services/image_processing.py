@@ -94,70 +94,23 @@ def _crop_cell_bytes(image_bytes: bytes, x1: int, y1: int, x2: int, y2: int, ori
 
 # ── Gemini cell classifier ────────────────────────────────────────────────────
 
-def _classify_columns_gemini(image_bytes: bytes, v_lines: List[int], h_lines: List[int],
-                               img_w: int, img_h: int, api_key: str, model: str) -> List[int]:
+def _classify_columns_by_width(v_lines: List[int]) -> List[int]:
     """
-    For each column gap, crop a representative cell and ask Gemini which columns are answer boxes.
-    Returns list of column indices (0-based) that are answer columns.
+    답란은 항상 가장 넓은 열이다.
+    전체 평균보다 1.5배 이상 넓은 열을 답란으로 선택.
     """
-    from google import genai
-    from google.genai import types
-
-    if len(v_lines) < 2 or len(h_lines) < 2:
+    if len(v_lines) < 2:
         return []
 
-    # Pick the middle row as representative
-    mid_row = len(h_lines) // 2
-    y1 = h_lines[mid_row - 1] if mid_row > 0 else 0
-    y2 = h_lines[mid_row] if mid_row < len(h_lines) else img_h
+    widths = [(i, v_lines[i + 1] - v_lines[i]) for i in range(len(v_lines) - 1)]
+    avg_w = sum(w for _, w in widths) / len(widths)
+    answer_cols = [i for i, w in widths if w >= avg_w * 1.5]
 
-    # Build one image with all column crops side by side, labeled
-    col_crops = []
-    for i in range(len(v_lines) - 1):
-        x1 = v_lines[i]
-        x2 = v_lines[i + 1]
-        cell_bytes = _crop_cell_bytes(image_bytes, x1, y1, x2, y2, img_w, img_h)
-        col_crops.append((i, cell_bytes))
+    # 해당 없으면 가장 넓은 열 하나만 선택
+    if not answer_cols:
+        answer_cols = [max(widths, key=lambda x: x[1])[0]]
 
-    if not col_crops:
-        return []
-
-    # Send all crops in one Gemini call
-    parts = []
-    desc_lines = []
-    for i, cell_bytes in col_crops:
-        b64 = base64.standard_b64encode(cell_bytes).decode("utf-8")
-        parts.append(types.Part.from_bytes(data=b64, mime_type="image/png"))
-        desc_lines.append(f"이미지 {i}: 열 {i}")
-
-    prompt = (
-        "위 이미지들은 한국 시험 답안지의 표에서 각 열(column)의 대표 셀입니다.\n"
-        "각 이미지 번호에 대해, 해당 열이 '학생이 답을 쓰는 빈 칸(답란)'인지 판단하세요.\n"
-        "답란은 보통 넓고 비어 있는 셀입니다.\n"
-        "문항 번호, 배점, 점수 칸은 답란이 아닙니다.\n\n"
-        "다음 JSON 형식으로만 응답하세요:\n"
-        '{"answer_columns": [0, 2, 3]}\n\n'
-        "answer_columns에는 답란인 열의 인덱스(0부터 시작)만 포함하세요.\n"
-        "JSON만 반환하세요."
-    )
-    parts.append(prompt)
-
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(model=model, contents=parts)
-    raw = response.text.strip()
-
-    try:
-        if raw.startswith("```"):
-            raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
-            raw = re.sub(r"\n?```$", "", raw)
-            raw = raw.strip()
-        data = json.loads(raw)
-        return data.get("answer_columns", [])
-    except (json.JSONDecodeError, KeyError, TypeError):
-        # Fallback: pick the widest column(s)
-        widths = [(i, v_lines[i + 1] - v_lines[i]) for i in range(len(v_lines) - 1)]
-        widths.sort(key=lambda x: -x[1])
-        return [widths[0][0]] if widths else []
+    return answer_cols
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -179,16 +132,8 @@ async def detect_regions_gemini(image_bytes: bytes, api_key: str, model: str = "
         if len(h_lines) < 2 or len(v_lines) < 2:
             return []
 
-        # Classify which columns are answer boxes
-        answer_cols = _classify_columns_gemini(
-            image_bytes, v_lines, h_lines, img_w, img_h, api_key, model
-        )
-
-        if not answer_cols:
-            # Fallback: pick the widest column
-            widths = [(i, v_lines[i + 1] - v_lines[i]) for i in range(len(v_lines) - 1)]
-            widths.sort(key=lambda x: -x[1])
-            answer_cols = [widths[0][0]] if widths else []
+        # 답란 = 가장 넓은 열 (배점/점수 칸은 항상 좁음)
+        answer_cols = _classify_columns_by_width(v_lines)
 
         img_gray = Image.open(io.BytesIO(image_bytes)).convert("L")
         scale_w = img_gray.width / img_w
