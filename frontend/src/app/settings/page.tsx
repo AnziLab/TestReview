@@ -5,10 +5,9 @@ import { getSettings, updateSettings } from '@/lib/api';
 import { Settings } from '@/lib/types';
 
 const GEMINI_MODEL_SUGGESTIONS = [
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-pro',
-  'gemini-1.5-flash',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-pro',
 ];
 
 const EyeIcon = ({ open }: { open: boolean }) =>

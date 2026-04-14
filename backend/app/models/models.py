@@ -121,6 +121,6 @@ class Settings(Base):
 
     id = Column(String, primary_key=True, default=_new_uuid)
     gemini_api_key = Column(String, nullable=True)
-    gemini_model = Column(String, nullable=True, default="gemini-2.0-flash")
+    gemini_model = Column(String, nullable=True, default="gemini-2.5-flash")
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)

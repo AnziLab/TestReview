@@ -7,7 +7,7 @@ from typing import List, Dict
 from PIL import Image
 
 
-async def detect_regions_gemini(image_bytes: bytes, api_key: str, model: str = "gemini-2.0-flash") -> List[Dict[str, float]]:
+async def detect_regions_gemini(image_bytes: bytes, api_key: str, model: str = "gemini-2.5-flash") -> List[Dict[str, float]]:
     """
     Use Gemini to detect answer regions in an exam sheet image.
     Returns list of {x, y, width, height} as fractions (0.0–1.0).
