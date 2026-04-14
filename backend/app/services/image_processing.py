@@ -14,21 +14,18 @@ async def detect_regions_gemini(image_bytes: bytes, api_key: str, model: str = "
     """
     import asyncio
 
+    # Gemini 2.5 native bounding box detection.
+    # The model returns boxes as [y_min, x_min, y_max, x_max] normalized to 0–1000.
     prompt = (
         "이 이미지는 한국 중고등학교 서답형(주관식) 시험 답안지입니다.\n"
-        "표 형태로 구성되어 있으며, 각 행에 문항 번호와 학생이 직접 답을 쓰는 빈 칸이 있습니다.\n\n"
-        "답안을 작성하는 빈 칸(답란)만 정확히 찾아주세요.\n"
-        "각 빈 칸의 위치를 이미지 전체 크기 대비 비율(0.0~1.0)로 반환하세요.\n\n"
-        "주의사항:\n"
+        "학생이 답을 직접 쓰는 빈 칸(답란)을 모두 감지하고 bounding box를 반환하세요.\n\n"
+        "감지 규칙:\n"
+        "- 실제 답을 쓰는 빈 칸만 포함 (가로로 긴 직사각형)\n"
         "- 문항 번호, 배점, 점수 칸, 제목, 학교명 등은 제외\n"
-        "- 실제 답을 쓰는 빈 칸만 포함 (가로로 긴 직사각형 형태)\n"
-        "- 하나의 문항에 여러 빈 칸이 있으면 각각 별도 영역으로 처리\n"
-        "- 빈 칸의 경계선을 정확히 포함하도록 좌표 지정\n"
-        "- 위에서 아래, 왼쪽에서 오른쪽 순서로 정렬\n\n"
-        "정확히 다음 JSON 형식으로만 응답하세요:\n"
-        '{"regions": [{"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.05}, ...]}\n\n'
-        "x, y는 영역 왼쪽 상단 모서리, width/height는 너비/높이입니다.\n"
-        "JSON만 반환하고 다른 설명은 추가하지 마세요."
+        "- 하나의 문항에 여러 칸이 있으면 각각 별도 box\n\n"
+        "다음 JSON 형식으로만 응답하세요 (좌표는 0~1000 정수):\n"
+        '[{"box_2d": [y_min, x_min, y_max, x_max], "label": "답란"}]\n\n'
+        "JSON 배열만 반환하고 다른 설명은 추가하지 마세요."
     )
 
     loop = asyncio.get_running_loop()
@@ -52,20 +49,25 @@ async def detect_regions_gemini(image_bytes: bytes, api_key: str, model: str = "
             raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
             raw = re.sub(r"\n?```$", "", raw)
             raw = raw.strip()
-        data = json.loads(raw)
+        items = json.loads(raw)
         regions = []
-        for r in data.get("regions", []):
-            x = float(r.get("x", 0))
-            y = float(r.get("y", 0))
-            w = float(r.get("width", 0))
-            h = float(r.get("height", 0))
-            if w > 0 and h > 0:
-                regions.append({
-                    "x": round(max(0.0, min(x, 1.0)), 4),
-                    "y": round(max(0.0, min(y, 1.0)), 4),
-                    "width": round(max(0.0, min(w, 1.0)), 4),
-                    "height": round(max(0.0, min(h, 1.0)), 4),
-                })
+        for item in items:
+            box = item.get("box_2d", [])
+            if len(box) != 4:
+                continue
+            y_min, x_min, y_max, x_max = [v / 1000.0 for v in box]
+            x = max(0.0, min(x_min, 1.0))
+            y = max(0.0, min(y_min, 1.0))
+            w = max(0.01, min(x_max - x_min, 1.0 - x))
+            h = max(0.01, min(y_max - y_min, 1.0 - y))
+            regions.append({
+                "x": round(x, 4),
+                "y": round(y, 4),
+                "width": round(w, 4),
+                "height": round(h, 4),
+            })
+        # Sort top-to-bottom, left-to-right
+        regions.sort(key=lambda r: (round(r["y"] * 20), r["x"]))
         return regions
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return []
