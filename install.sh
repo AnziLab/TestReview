@@ -67,7 +67,7 @@ ENVEOF
     echo "     .env 생성 완료"
 fi
 
-alembic upgrade head --quiet
+alembic upgrade head
 echo "     Python OK"
 
 # ── 4. 프론트엔드 의존성 설치 ────────────────────────────────────────────

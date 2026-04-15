@@ -19,6 +19,20 @@ if [ ! -d ".venv" ]; then
 fi
 source .venv/bin/activate
 pip install -r requirements.txt --quiet
+
+if [ ! -f ".env" ]; then
+    SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+    ENC_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    cat > .env << ENVEOF
+DATABASE_URL=sqlite+aiosqlite:///./grading.db
+SECRET_KEY=$SECRET_KEY
+ENCRYPTION_KEY=$ENC_KEY
+STORAGE_PATH=./storage
+ALLOWED_ORIGINS=["http://localhost:3000"]
+ACCESS_TOKEN_EXPIRE_MINUTES=120
+REFRESH_TOKEN_EXPIRE_DAYS=14
+ENVEOF
+fi
 echo "  ✓ 백엔드 준비 완료"
 
 # 2. 프론트엔드 의존성
