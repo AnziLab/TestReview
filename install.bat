@@ -115,23 +115,6 @@ if %errorlevel% neq 0 (
 )
 echo      프론트엔드 OK
 
-:: ── 어드민 계정 생성 ─────────────────────────────────────────────────────
-echo.
-echo ───────────────────────────────────────────
-echo   어드민 계정 설정
-echo ───────────────────────────────────────────
-cd "%INSTALL_DIR%backend"
-call .venv\Scripts\activate.bat
-
-set /p ADMIN_USER="  어드민 아이디 입력: "
-set /p ADMIN_EMAIL="  어드민 이메일 입력: "
-set /p ADMIN_PW="  어드민 비밀번호 입력: "
-
-python -m app.cli create-admin --username "%ADMIN_USER%" --email "%ADMIN_EMAIL%" --password "%ADMIN_PW%"
-if %errorlevel% neq 0 (
-    echo [!] 계정 생성 실패 (이미 존재할 수 있습니다)
-)
-
 :: ── 바탕화면 단축키 생성 ─────────────────────────────────────────────────
 echo.
 echo 바탕화면 단축키 생성 중...
@@ -149,6 +132,9 @@ echo   설치 완료!
 echo.
 echo   바탕화면의 "채점기준 정제 도구" 파일을
 echo   더블클릭하면 실행됩니다.
+echo.
+echo   처음 실행 시 브라우저에서 관리자 계정을
+echo   설정하는 화면이 나타납니다.
 echo =============================================
 echo.
 pause
