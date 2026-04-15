@@ -93,5 +93,7 @@ export interface GradingResult {
   student_number?: string
   name?: string
   scores: Record<number, number | null>
+  class_id?: number
+  class_name?: string
   total: number
 }

@@ -34,14 +34,12 @@ def _build_ocr_prompt(question_numbers: list[str]) -> str:
 - JSON만 반환, 다른 설명 없음"""
 
 
-def _pdf_page_to_image(pdf_path: str, page_index: int) -> bytes:
-    doc = fitz.open(pdf_path)
+def _render_page(doc: fitz.Document, page_index: int) -> bytes:
+    """열려있는 doc에서 페이지 하나를 PNG bytes로 렌더링."""
     page = doc[page_index]
     mat = fitz.Matrix(2.0, 2.0)
     pix = page.get_pixmap(matrix=mat)
-    data = pix.tobytes("png")
-    doc.close()
-    return data
+    return pix.tobytes("png")
 
 
 def _group_pages(total_pages: int, scan_mode: str) -> list[list[int]]:
@@ -60,14 +58,14 @@ def _group_pages(total_pages: int, scan_mode: str) -> list[list[int]]:
 
 async def _call_gemini_for_student(
     client: genai.Client,
-    pdf_path: str,
+    doc: fitz.Document,
     page_indices: list[int],
     question_numbers: list[str],
 ) -> dict:
-    """Call Gemini on the given pages and parse the student answer JSON."""
+    """열려있는 doc에서 해당 페이지만 렌더링해 Gemini 호출."""
     parts = []
     for idx in page_indices:
-        img_bytes = _pdf_page_to_image(pdf_path, idx)
+        img_bytes = _render_page(doc, idx)
         parts.append(types.Part.from_bytes(data=img_bytes, mime_type="image/png"))
     parts.append(types.Part.from_text(text=_build_ocr_prompt(question_numbers)))
 
@@ -119,21 +117,19 @@ async def ocr_class_pdf(
         "answers": [{"question_number": str, "answer_text": str}]
     }
     """
+    # PDF 한 번만 열고 전체 처리 후 닫음
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
-    doc.close()
-
     groups = _group_pages(total_pages, scan_mode)
     results = []
-
     q_numbers = question_numbers or []
 
     for page_indices in groups:
         try:
-            data = await _call_gemini_for_student(client, pdf_path, page_indices, q_numbers)
+            data = await _call_gemini_for_student(client, doc, page_indices, q_numbers)
         except Exception:
             try:
-                data = await _call_gemini_for_student(client, pdf_path, page_indices[:1], q_numbers)
+                data = await _call_gemini_for_student(client, doc, page_indices[:1], q_numbers)
             except Exception:
                 data = {"student_number": None, "name": None, "answers": []}
 
@@ -151,4 +147,5 @@ async def ocr_class_pdf(
             }
         )
 
+    doc.close()
     return results

@@ -281,33 +281,63 @@ export default function GradingPage({
                     <th className="px-4 py-3 text-right text-xs font-medium text-slate-500">합계</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {results.map((r) => (
-                    <tr
-                      key={r.student_id}
-                      onClick={() => handleSelectStudent(r)}
-                      className={`cursor-pointer transition-colors ${
-                        selectedStudent?.student_id === r.student_id
-                          ? 'bg-indigo-50'
-                          : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <td className="px-4 py-2.5 sticky left-0 bg-inherit font-mono text-xs">
-                        {r.student_number ?? '-'}
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-800">{r.name ?? '-'}</td>
-                      {!selectedStudent && questions.map((q) => (
-                        <td key={q.id} className="px-3 py-2.5 text-right">
-                          {r.scores?.[q.id] != null
-                            ? <span className="font-medium">{r.scores[q.id]}</span>
-                            : <span className="text-slate-300">-</span>}
-                        </td>
-                      ))}
-                      <td className="px-4 py-2.5 text-right">
-                        <Badge tone="primary">{r.total}</Badge>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody>
+                  {(() => {
+                    // 반별로 그룹핑
+                    const groups: { className: string; students: typeof results }[] = []
+                    let currentClass = ''
+                    for (const r of results) {
+                      const cn = r.class_name ?? '미분류'
+                      if (cn !== currentClass) {
+                        groups.push({ className: cn, students: [] })
+                        currentClass = cn
+                      }
+                      groups[groups.length - 1].students.push(r)
+                    }
+                    const multiClass = groups.length > 1
+
+                    return groups.map(({ className, students: classStudents }) => (
+                      <>
+                        {multiClass && (
+                          <tr key={`header-${className}`}>
+                            <td
+                              colSpan={2 + (selectedStudent ? 0 : questions.length) + 1}
+                              className="px-4 py-2 bg-slate-100 text-xs font-semibold text-slate-600 border-t border-slate-200"
+                            >
+                              {className}
+                              <span className="ml-2 font-normal text-slate-400">{classStudents.length}명</span>
+                            </td>
+                          </tr>
+                        )}
+                        {classStudents.map((r) => (
+                          <tr
+                            key={r.student_id}
+                            onClick={() => handleSelectStudent(r)}
+                            className={`cursor-pointer transition-colors border-t border-slate-100 ${
+                              selectedStudent?.student_id === r.student_id
+                                ? 'bg-indigo-50'
+                                : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <td className="px-4 py-2.5 sticky left-0 bg-inherit font-mono text-xs">
+                              {r.student_number ?? '-'}
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-800">{r.name ?? '-'}</td>
+                            {!selectedStudent && questions.map((q) => (
+                              <td key={q.id} className="px-3 py-2.5 text-right">
+                                {r.scores?.[q.id] != null
+                                  ? <span className="font-medium">{r.scores[q.id]}</span>
+                                  : <span className="text-slate-300">-</span>}
+                              </td>
+                            ))}
+                            <td className="px-4 py-2.5 text-right">
+                              <Badge tone="primary">{r.total}</Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </>
+                    ))
+                  })()}
                 </tbody>
               </table>
             </Card>

@@ -54,22 +54,24 @@ async def list_gradings(
     await _get_exam_owned(exam_id, current_user.id, db)
 
     rows = (await db.execute(
-        select(Grading, Answer, Student)
+        select(Grading, Answer, Student, Class)
         .join(Answer, Grading.answer_id == Answer.id)
         .join(Student, Answer.student_id == Student.id)
         .join(Class, Student.class_id == Class.id)
         .where(Class.exam_id == exam_id)
-        .order_by(Student.student_number, Answer.question_id)
+        .order_by(Class.name, Student.student_number, Answer.question_id)
     )).all()
 
     # Group by student
     students: dict[int, dict] = {}
-    for grading, answer, student in rows:
+    for grading, answer, student, cls in rows:
         if student.id not in students:
             students[student.id] = {
                 "student_id": student.id,
                 "student_number": student.student_number,
                 "name": student.name,
+                "class_id": cls.id,
+                "class_name": cls.name,
                 "scores": {},
                 "total": 0.0,
             }
