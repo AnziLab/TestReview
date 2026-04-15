@@ -11,8 +11,19 @@ echo "  채점기준 정제 도구 설치"
 echo "============================================="
 echo ""
 
+# ── 0. Git 확인 ──────────────────────────────────────────────────────────
+# Mac은 git이 Xcode Command Line Tools에 포함 (없으면 자동 설치 팝업 뜸)
+echo "[1/5] Git 확인 중..."
+if ! command -v git &>/dev/null; then
+    echo "     Git이 없습니다. Xcode Command Line Tools 설치 중..."
+    xcode-select --install 2>/dev/null || true
+    echo "     설치 팝업이 나타나면 '설치'를 클릭하고, 완료 후 이 스크립트를 다시 실행하세요."
+    exit 1
+fi
+echo "     Git OK ($(git --version))"
+
 # ── 1. Python 확인 및 설치 ────────────────────────────────────────────────
-echo "[1/4] Python 확인 중..."
+echo "[2/5] Python 확인 중..."
 if ! command -v python3.11 &>/dev/null && ! python3 --version 2>&1 | grep -q "3\.1[1-9]"; then
     echo "     Python 3.11이 없습니다. Homebrew로 설치합니다..."
     if ! command -v brew &>/dev/null; then
@@ -24,7 +35,7 @@ fi
 echo "     Python OK ($(python3 --version))"
 
 # ── 2. Node.js 확인 및 설치 ──────────────────────────────────────────────
-echo "[2/4] Node.js 확인 중..."
+echo "[3/5] Node.js 확인 중..."
 if ! command -v node &>/dev/null; then
     echo "     Node.js가 없습니다. Homebrew로 설치합니다..."
     brew install node
@@ -32,7 +43,7 @@ fi
 echo "     Node.js OK ($(node --version))"
 
 # ── 3. Python 의존성 설치 ────────────────────────────────────────────────
-echo "[3/4] Python 패키지 설치 중..."
+echo "[4/5] Python 패키지 설치 중..."
 cd "$SCRIPT_DIR/backend"
 if [ ! -d ".venv" ]; then
     python3 -m venv .venv
@@ -60,7 +71,7 @@ alembic upgrade head --quiet
 echo "     Python OK"
 
 # ── 4. 프론트엔드 의존성 설치 ────────────────────────────────────────────
-echo "[4/4] 프론트엔드 패키지 설치 중..."
+echo "[5/5] 프론트엔드 패키지 설치 중..."
 cd "$SCRIPT_DIR/frontend"
 if [ ! -d "node_modules" ]; then
     npm install --silent

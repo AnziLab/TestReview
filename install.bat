@@ -19,8 +19,25 @@ if %errorlevel% neq 0 (
 set INSTALL_DIR=%~dp0
 cd /d "%INSTALL_DIR%"
 
-:: ── 1. Python 확인 및 설치 ────────────────────────────────────────────────
-echo [1/5] Python 확인 중...
+:: ── 1. Git 확인 및 설치 ──────────────────────────────────────────────────
+echo [1/6] Git 확인 중...
+git --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo      Git이 없습니다. 자동 설치합니다...
+    winget install --id Git.Git --source winget --silent --accept-package-agreements --accept-source-agreements
+    if %errorlevel% neq 0 (
+        echo [!] Git 설치 실패. 수동으로 설치해주세요:
+        echo     https://git-scm.com/download/win
+        pause
+        exit /b 1
+    )
+    set "PATH=%PATH%;%ProgramFiles%\Git\cmd"
+)
+git --version
+echo      Git OK
+
+:: ── 2. Python 확인 및 설치 ────────────────────────────────────────────────
+echo [2/6] Python 확인 중...
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo      Python이 없습니다. 자동 설치합니다...
@@ -40,7 +57,7 @@ echo      Python OK
 
 :: ── 2. Node.js 확인 및 설치 ──────────────────────────────────────────────
 echo.
-echo [2/5] Node.js 확인 중...
+echo [3/6] Node.js 확인 중...
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo      Node.js가 없습니다. 자동 설치합니다...
@@ -59,7 +76,7 @@ echo      Node.js OK
 
 :: ── 3. Python 가상환경 및 패키지 설치 ────────────────────────────────────
 echo.
-echo [3/5] Python 패키지 설치 중... (시간이 걸릴 수 있습니다)
+echo [4/6] Python 패키지 설치 중... (시간이 걸릴 수 있습니다)
 cd "%INSTALL_DIR%backend"
 if not exist ".venv" (
     python -m venv .venv
@@ -92,7 +109,7 @@ if not exist "%INSTALL_DIR%backend\.env" (
 
 :: ── 4. DB 마이그레이션 ───────────────────────────────────────────────────
 echo.
-echo [4/5] 데이터베이스 초기화 중...
+echo [5/6] 데이터베이스 초기화 중...
 alembic upgrade head
 if %errorlevel% neq 0 (
     echo [!] DB 초기화 실패
@@ -103,7 +120,7 @@ echo      DB OK
 
 :: ── 5. 프론트엔드 패키지 설치 ────────────────────────────────────────────
 echo.
-echo [5/5] 프론트엔드 패키지 설치 중... (시간이 걸릴 수 있습니다)
+echo [6/6] 프론트엔드 패키지 설치 중... (시간이 걸릴 수 있습니다)
 cd "%INSTALL_DIR%frontend"
 if not exist "node_modules" (
     call npm install --silent
