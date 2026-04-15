@@ -25,6 +25,7 @@ export async function apiFetch<T>(
   const { skipContentType, ...restOptions } = options ?? {}
   const token =
     typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
+  const hadToken = Boolean(token)
 
   const headers: Record<string, string> = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -41,7 +42,7 @@ export async function apiFetch<T>(
     headers,
   })
 
-  if (res.status === 401) {
+  if (res.status === 401 && hadToken) {
     const newToken = await refreshAccessToken()
     if (newToken) {
       const retryHeaders: Record<string, string> = {

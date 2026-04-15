@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '@/lib/context/AuthContext'
 import { Button, Card, Input } from '@/components/ui'
@@ -68,12 +67,6 @@ export default function LoginPage() {
               {isSubmitting ? '로그인 중...' : '로그인'}
             </Button>
           </form>
-          <p className="text-sm text-center text-slate-500 mt-4">
-            계정이 없으신가요?{' '}
-            <Link href="/signup" className="text-indigo-600 hover:underline">
-              회원가입
-            </Link>
-          </p>
         </Card>
       </div>
     </div>
