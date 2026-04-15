@@ -12,6 +12,8 @@ from app.models.exam import Exam, Question
 from app.models.user import User
 from app.schemas.exam import ExamCreate, ExamOut, ExamUpdate, RubricExtractionStatus
 from app.services.rubric_extract_service import run_rubric_extraction
+from app.services.exam_paper_service import run_exam_paper_extraction
+from app.services.rubric_generate_service import run_rubric_generation
 from app.storage.local import storage
 
 router = APIRouter(prefix="/exams", tags=["exams"])
@@ -203,3 +205,106 @@ async def _get_exam_owned(exam_id: int, teacher_id: int, db: AsyncSession) -> Ex
     if exam.teacher_id != teacher_id:
         raise HTTPException(status_code=403, detail="Not your exam")
     return exam
+
+
+@router.post("/{exam_id}/exam-paper")
+async def upload_exam_paper(
+    exam_id: int,
+    background_tasks: BackgroundTasks,
+    question_from: int,
+    question_to: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload exam paper PDF and extract question texts for a range."""
+    exam = await _get_exam_owned(exam_id, current_user.id, db)
+
+    if not current_user.gemini_api_key_encrypted:
+        raise HTTPException(status_code=400, detail="Gemini API key not configured")
+
+    if question_from < 1 or question_to < question_from:
+        raise HTTPException(status_code=400, detail="Invalid question range")
+
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_RUBRIC_TYPES:
+        raise HTTPException(status_code=400, detail="PDF 파일만 지원합니다")
+
+    data = await file.read()
+    ext = Path(file.filename or "file.pdf").suffix
+    rel_path = f"exam_papers/{exam_id}/{uuid.uuid4()}{ext}"
+    saved_path = await storage.save(data, rel_path)
+
+    exam.exam_paper_filename = file.filename
+    exam.exam_paper_path = saved_path
+    exam.exam_paper_status = "processing"
+    await db.commit()
+
+    background_tasks.add_task(
+        run_exam_paper_extraction,
+        exam_id=exam_id,
+        file_path=saved_path,
+        teacher_id=current_user.id,
+        question_from=question_from,
+        question_to=question_to,
+    )
+
+    return {"message": "시험지 업로드 완료. 문항 텍스트 추출 시작.", "filename": file.filename}
+
+
+@router.get("/{exam_id}/exam-paper-status")
+async def exam_paper_status(
+    exam_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    exam = await _get_exam_owned(exam_id, current_user.id, db)
+    return {
+        "status": exam.exam_paper_status or "none",
+        "filename": exam.exam_paper_filename,
+    }
+
+
+@router.post("/{exam_id}/generate-rubric")
+async def generate_rubric_from_paper(
+    exam_id: int,
+    background_tasks: BackgroundTasks,
+    question_from: int,
+    question_to: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload exam paper and generate draft rubric (model answers + criteria)."""
+    exam = await _get_exam_owned(exam_id, current_user.id, db)
+
+    if not current_user.gemini_api_key_encrypted:
+        raise HTTPException(status_code=400, detail="Gemini API key not configured")
+
+    if question_from < 1 or question_to < question_from:
+        raise HTTPException(status_code=400, detail="Invalid question range")
+
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_RUBRIC_TYPES:
+        raise HTTPException(status_code=400, detail="PDF 파일만 지원합니다")
+
+    data = await file.read()
+    ext = Path(file.filename or "file.pdf").suffix
+    rel_path = f"exam_papers/{exam_id}/{uuid.uuid4()}{ext}"
+    saved_path = await storage.save(data, rel_path)
+
+    exam.exam_paper_filename = file.filename
+    exam.exam_paper_path = saved_path
+    exam.status = "draft"
+    await db.commit()
+
+    background_tasks.add_task(
+        run_rubric_generation,
+        exam_id=exam_id,
+        file_path=saved_path,
+        teacher_id=current_user.id,
+        question_from=question_from,
+        question_to=question_to,
+    )
+
+    return {"message": "시험지 업로드 완료. 채점기준 초안 생성 시작.", "filename": file.filename}

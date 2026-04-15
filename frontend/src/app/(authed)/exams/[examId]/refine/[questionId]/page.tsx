@@ -263,11 +263,19 @@ export default function RefineDetailPage({
         </div>
         <div className="p-4">
           {question && (
-            <RubricEditor
-              key={question.id}
-              questionId={questionId}
-              initialRubric={question.rubric_draft_json ?? question.rubric_json ?? emptyRubric}
-            />
+            <>
+              {question.model_answer && (
+                <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs font-medium text-blue-700 mb-1">모범답안</p>
+                  <p className="text-sm text-blue-900 whitespace-pre-wrap">{question.model_answer}</p>
+                </div>
+              )}
+              <RubricEditor
+                key={question.id}
+                questionId={questionId}
+                initialRubric={question.rubric_draft_json ?? question.rubric_json ?? emptyRubric}
+              />
+            </>
           )}
         </div>
       </div>

@@ -42,23 +42,43 @@ async def start_grading(
     return {"message": "Grading started in background"}
 
 
-@router.get("/exams/{exam_id}/gradings", response_model=list[GradingOut])
+@router.get("/exams/{exam_id}/gradings")
 async def list_gradings(
     exam_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """학생별로 그룹핑된 채점 결과 반환.
+    [{student_id, student_number, name, scores: {question_id: score}, total}]
+    """
     await _get_exam_owned(exam_id, current_user.id, db)
 
-    # Join Grading → Answer → Student → Class (exam_id filter)
-    result = await db.execute(
-        select(Grading)
+    rows = (await db.execute(
+        select(Grading, Answer, Student)
         .join(Answer, Grading.answer_id == Answer.id)
         .join(Student, Answer.student_id == Student.id)
         .join(Class, Student.class_id == Class.id)
         .where(Class.exam_id == exam_id)
-    )
-    return result.scalars().all()
+        .order_by(Student.student_number, Answer.question_id)
+    )).all()
+
+    # Group by student
+    students: dict[int, dict] = {}
+    for grading, answer, student in rows:
+        if student.id not in students:
+            students[student.id] = {
+                "student_id": student.id,
+                "student_number": student.student_number,
+                "name": student.name,
+                "scores": {},
+                "total": 0.0,
+            }
+        students[student.id]["scores"][answer.question_id] = float(grading.score)
+        students[student.id]["total"] = round(
+            students[student.id]["total"] + float(grading.score), 2
+        )
+
+    return list(students.values())
 
 
 @router.put("/gradings/{grading_id}", response_model=GradingOut)
@@ -103,3 +123,107 @@ async def download_gradings_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="gradings_{exam_id}.xlsx"'},
     )
+
+
+@router.get("/students/{student_id}/grading-detail")
+async def student_grading_detail(
+    student_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """학생 1명의 문항별 상세 채점 결과."""
+    from app.models.exam import Question
+    from sqlalchemy.orm import selectinload
+
+    student = await db.get(Student, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    cls = await db.get(Class, student.class_id)
+    exam = await db.get(Exam, cls.exam_id)
+    if exam.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your student")
+
+    rows = (await db.execute(
+        select(Answer, Grading, Question)
+        .outerjoin(Grading, Grading.answer_id == Answer.id)
+        .join(Question, Answer.question_id == Question.id)
+        .where(Answer.student_id == student_id)
+        .order_by(Question.order_index)
+    )).all()
+
+    return [
+        {
+            "question_id": q.id,
+            "question_number": q.number,
+            "max_score": float(q.max_score),
+            "model_answer": q.model_answer,
+            "answer_text": a.answer_text,
+            "score": float(g.score) if g else None,
+            "rationale": g.rationale if g else None,
+            "graded_by": g.graded_by if g else None,
+        }
+        for a, g, q in rows
+    ]
+
+
+@router.post("/questions/{question_id}/grade", status_code=status.HTTP_202_ACCEPTED)
+async def grade_question(
+    question_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """특정 문항만 재채점."""
+    from app.models.exam import Question
+    from app.services.grading_service import run_grading_question
+
+    question = await db.get(Question, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    if not current_user.gemini_api_key_encrypted:
+        raise HTTPException(status_code=400, detail="Gemini API key not configured")
+
+    background_tasks.add_task(
+        run_grading_question,
+        question_id=question_id,
+        teacher_id=current_user.id,
+    )
+    return {"message": f"Re-grading started for question {question_id}"}
+
+
+@router.get("/questions/{question_id}/grading-results")
+async def question_grading_results(
+    question_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """문항 1개의 전체 학생 답안 + 채점결과."""
+    from app.models.exam import Question
+
+    question = await db.get(Question, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    rows = (await db.execute(
+        select(Answer, Grading, Student)
+        .outerjoin(Grading, Grading.answer_id == Answer.id)
+        .join(Student, Answer.student_id == Student.id)
+        .where(Answer.question_id == question_id)
+        .order_by(Student.student_number)
+    )).all()
+
+    return [
+        {
+            "student_id": s.id,
+            "student_number": s.student_number,
+            "name": s.name,
+            "answer_text": a.answer_text,
+            "score": float(g.score) if g else None,
+            "max_score": float(question.max_score),
+            "rationale": g.rationale if g else None,
+            "graded_by": g.graded_by if g else None,
+        }
+        for a, g, s in rows
+    ]

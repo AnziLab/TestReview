@@ -62,7 +62,7 @@ class ClusterMember(Base):
         Integer, ForeignKey("answer_clusters.id", ondelete="CASCADE"), nullable=False
     )
     answer_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("answers.id"), nullable=False
+        Integer, ForeignKey("answers.id", ondelete="CASCADE"), nullable=False
     )
 
     cluster: Mapped["AnswerCluster"] = relationship("AnswerCluster", back_populates="members")

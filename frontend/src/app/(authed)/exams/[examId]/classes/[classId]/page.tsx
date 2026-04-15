@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react'
 import useSWR from 'swr'
-import { classesApi, studentsApi, questionsApi } from '@/lib/api/exams'
+import { classesApi, studentsApi, questionsApi, answersApi } from '@/lib/api/exams'
 import type { Student, Answer, Question } from '@/lib/types'
 
 export default function ClassDetailPage({
@@ -21,41 +21,12 @@ export default function ClassDetailPage({
     () => questionsApi.list(Number(examId))
   )
 
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editValues, setEditValues] = useState<{ student_number: string; name: string }>({ student_number: '', name: '' })
-  const [saving, setSaving] = useState(false)
-
-  const startEdit = (student: Student) => {
-    setEditingId(student.id)
-    setEditValues({
-      student_number: student.student_number || '',
-      name: student.name || '',
-    })
-  }
-
-  const saveEdit = async (id: number) => {
-    setSaving(true)
-    try {
-      await studentsApi.update(id, {
-        student_number: editValues.student_number || undefined,
-        name: editValues.name || undefined,
-      })
-      mutateStudents()
-      setEditingId(null)
-    } catch (e) {
-      alert(e instanceof Error ? e.message : '저장 실패')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
 
   if (isLoading) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6">
-        <svg className="animate-spin h-8 w-8 text-blue-600" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+      <div className="flex flex-1 items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
       </div>
     )
   }
@@ -71,148 +42,240 @@ export default function ClassDetailPage({
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900">{cls?.name ?? '반 상세'}</h1>
-        <p className="text-sm text-gray-500">{students?.length ?? 0}명</p>
+    <div className="flex h-full overflow-hidden">
+      {/* 왼쪽: 학생 목록 */}
+      <div className={`flex flex-col overflow-hidden transition-all ${selectedStudent ? 'w-1/2' : 'w-full'}`}>
+        <div className="p-4 border-b border-gray-200 flex-shrink-0">
+          <h1 className="text-lg font-bold text-gray-900">{cls?.name ?? '반 상세'}</h1>
+          <p className="text-sm text-gray-500">{students?.length ?? 0}명</p>
+        </div>
+
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">학번</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">이름</th>
+                {!selectedStudent && questions?.map((q) => (
+                  <th key={q.id} className="px-4 py-3 text-left text-xs font-medium text-gray-500 max-w-[120px]">
+                    {q.number}번
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {students?.map((student) => (
+                <StudentRow
+                  key={student.id}
+                  student={student}
+                  questions={questions ?? []}
+                  showAnswers={!selectedStudent}
+                  isSelected={selectedStudent?.id === student.id}
+                  onSelect={() => setSelectedStudent(
+                    selectedStudent?.id === student.id ? null : student
+                  )}
+                  onUpdated={() => mutateStudents()}
+                />
+              ))}
+            </tbody>
+          </table>
+          {(!students || students.length === 0) && (
+            <div className="py-8 text-center text-gray-400 text-sm">학생 데이터가 없습니다.</div>
+          )}
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 w-24">학번</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 w-24">이름</th>
-              {questions?.map((q) => (
-                <th key={q.id} className="px-4 py-3 text-left text-xs font-medium text-gray-500">
-                  문항 {q.number}
-                </th>
-              ))}
-              <th className="px-4 py-3 w-20" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {students?.map((student) => (
-              <StudentRow
-                key={student.id}
-                student={student}
-                questions={questions ?? []}
-                isEditing={editingId === student.id}
-                editValues={editValues}
-                saving={saving}
-                onStartEdit={() => startEdit(student)}
-                onCancelEdit={() => setEditingId(null)}
-                onSaveEdit={() => saveEdit(student.id)}
-                onChangeEditValue={(field, val) =>
-                  setEditValues((prev) => ({ ...prev, [field]: val }))
-                }
-              />
-            ))}
-          </tbody>
-        </table>
-        {(!students || students.length === 0) && (
-          <div className="py-8 text-center text-gray-400 text-sm">학생 데이터가 없습니다.</div>
-        )}
-      </div>
+      {/* 오른쪽: 답안 수정 패널 */}
+      {selectedStudent && (
+        <div className="w-1/2 border-l border-gray-200 flex flex-col overflow-hidden bg-white">
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+            <div>
+              <p className="font-semibold text-gray-900">
+                {selectedStudent.name ?? '-'}
+                <span className="ml-2 text-sm font-normal text-gray-500">{selectedStudent.student_number}</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">답안 클릭 후 수정, 포커스 이탈 시 자동 저장</p>
+            </div>
+            <button onClick={() => setSelectedStudent(null)} className="text-gray-400 hover:text-gray-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <AnswerEditor
+            studentId={selectedStudent.id}
+            questions={questions ?? []}
+          />
+        </div>
+      )}
     </div>
   )
 }
 
 function StudentRow({
-  student,
-  questions,
-  isEditing,
-  editValues,
-  saving,
-  onStartEdit,
-  onCancelEdit,
-  onSaveEdit,
-  onChangeEditValue,
+  student, questions, showAnswers, isSelected, onSelect, onUpdated,
 }: {
   student: Student
   questions: Question[]
-  isEditing: boolean
-  editValues: { student_number: string; name: string }
-  saving: boolean
-  onStartEdit: () => void
-  onCancelEdit: () => void
-  onSaveEdit: () => void
-  onChangeEditValue: (field: 'student_number' | 'name', val: string) => void
+  showAnswers: boolean
+  isSelected: boolean
+  onSelect: () => void
+  onUpdated: () => void
 }) {
   const { data: answers } = useSWR(
     `students/${student.id}/answers`,
     () => studentsApi.getAnswers(student.id)
   )
+  const [editing, setEditing] = useState(false)
+  const [vals, setVals] = useState({ student_number: student.student_number || '', name: student.name || '' })
+  const [saving, setSaving] = useState(false)
 
   const answerMap: Record<number, string> = {}
-  answers?.forEach((a: Answer) => {
-    answerMap[a.question_id] = a.answer_text
-  })
+  answers?.forEach((a: Answer) => { answerMap[a.question_id] = a.answer_text })
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await studentsApi.update(student.id, {
+        student_number: vals.student_number || undefined,
+        name: vals.name || undefined,
+      })
+      onUpdated()
+      setEditing(false)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '저장 실패')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
-    <tr className={student.needs_review ? 'bg-yellow-50' : ''}>
-      <td className="px-4 py-2">
-        {isEditing ? (
+    <tr
+      className={`cursor-pointer transition-colors ${
+        isSelected ? 'bg-blue-50' : student.needs_review ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'
+      }`}
+      onClick={() => !editing && onSelect()}
+    >
+      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+        {editing ? (
           <input
-            className="border border-gray-300 rounded px-2 py-1 w-full text-sm focus:ring-1 focus:ring-blue-500"
-            value={editValues.student_number}
-            onChange={(e) => onChangeEditValue('student_number', e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 w-full text-sm"
+            value={vals.student_number}
+            onChange={(e) => setVals((p) => ({ ...p, student_number: e.target.value }))}
+            onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <span className={student.needs_review ? 'font-medium text-yellow-700' : ''}>
+          <span className={student.needs_review ? 'text-yellow-700 font-medium' : ''}>
             {student.student_number ?? '-'}
           </span>
         )}
       </td>
-      <td className="px-4 py-2">
-        {isEditing ? (
-          <input
-            className="border border-gray-300 rounded px-2 py-1 w-full text-sm focus:ring-1 focus:ring-blue-500"
-            value={editValues.name}
-            onChange={(e) => onChangeEditValue('name', e.target.value)}
-          />
-        ) : (
-          <span className={student.needs_review ? 'font-medium text-yellow-700' : ''}>
-            {student.name ?? '-'}
-            {student.needs_review && (
-              <span className="ml-1 bg-yellow-100 text-yellow-700 text-xs px-1.5 py-0.5 rounded-full">검토 필요</span>
-            )}
-          </span>
-        )}
-      </td>
-      {questions.map((q) => (
-        <td key={q.id} className="px-4 py-2 max-w-xs">
-          <span className="text-gray-600 text-xs line-clamp-2">
-            {answerMap[q.id] ?? '-'}
-          </span>
-        </td>
-      ))}
-      <td className="px-4 py-2">
-        {isEditing ? (
-          <div className="flex gap-1">
-            <button
-              onClick={onSaveEdit}
-              disabled={saving}
-              className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50"
-            >
-              저장
-            </button>
-            <button
-              onClick={onCancelEdit}
-              className="text-xs text-gray-400 hover:text-gray-600"
-            >
-              취소
-            </button>
+      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+        {editing ? (
+          <div className="flex items-center gap-1">
+            <input
+              className="border border-gray-300 rounded px-2 py-1 w-full text-sm"
+              value={vals.name}
+              onChange={(e) => setVals((p) => ({ ...p, name: e.target.value }))}
+            />
+            <button onClick={save} disabled={saving} className="text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap">저장</button>
+            <button onClick={() => setEditing(false)} className="text-xs text-gray-400 hover:text-gray-600">취소</button>
           </div>
         ) : (
-          <button
-            onClick={onStartEdit}
-            className="text-xs text-gray-400 hover:text-blue-600"
-          >
-            수정
-          </button>
+          <div className="flex items-center gap-1">
+            <span className={student.needs_review ? 'text-yellow-700 font-medium' : ''}>
+              {student.name ?? '-'}
+            </span>
+            {student.needs_review && (
+              <span className="bg-yellow-100 text-yellow-700 text-xs px-1.5 py-0.5 rounded-full">검토필요</span>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditing(true) }}
+              className="text-xs text-gray-300 hover:text-blue-500 ml-1"
+            >
+              ✎
+            </button>
+          </div>
         )}
       </td>
+      {showAnswers && questions.map((q) => (
+        <td key={q.id} className="px-4 py-2.5 max-w-[120px]">
+          <span className="text-gray-600 text-xs line-clamp-2">{answerMap[q.id] || '-'}</span>
+        </td>
+      ))}
     </tr>
+  )
+}
+
+function AnswerEditor({ studentId, questions }: { studentId: number; questions: Question[] }) {
+  const { data: answers, mutate } = useSWR(
+    `students/${studentId}/answers`,
+    () => studentsApi.getAnswers(studentId)
+  )
+  const [savingId, setSavingId] = useState<number | null>(null)
+  const [localTexts, setLocalTexts] = useState<Record<number, string>>({})
+
+  const answerMap: Record<number, Answer> = {}
+  answers?.forEach((a) => { answerMap[a.question_id] = a })
+
+  const handleBlur = async (answerId: number, text: string) => {
+    setSavingId(answerId)
+    try {
+      await answersApi.update(answerId, text)
+      mutate()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '저장 실패')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  if (!answers) {
+    return (
+      <div className="flex justify-center py-8">
+        <div className="h-6 w-6 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {questions.map((q) => {
+        const answer = answerMap[q.id]
+        if (!answer) return (
+          <div key={q.id} className="rounded-lg border border-gray-200 p-3">
+            <p className="text-sm font-medium text-gray-700 mb-1">{q.number}번 <span className="text-gray-400 font-normal text-xs">/{q.max_score}점</span></p>
+            <p className="text-xs text-gray-400 italic">답안 없음</p>
+          </div>
+        )
+
+        const currentText = localTexts[answer.id] ?? answer.answer_text
+        const isSaving = savingId === answer.id
+
+        return (
+          <div key={q.id} className="rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-sm font-medium text-gray-700">
+                {q.number}번
+                <span className="ml-1 text-gray-400 font-normal text-xs">/{q.max_score}점</span>
+              </p>
+              {isSaving && (
+                <span className="text-xs text-blue-500 flex items-center gap-1">
+                  <div className="h-2.5 w-2.5 rounded-full border-2 border-blue-200 border-t-blue-500 animate-spin" />
+                  저장 중
+                </span>
+              )}
+            </div>
+            <textarea
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              rows={2}
+              value={currentText}
+              onChange={(e) => setLocalTexts((p) => ({ ...p, [answer.id]: e.target.value }))}
+              onBlur={(e) => handleBlur(answer.id, e.target.value)}
+            />
+          </div>
+        )
+      })}
+    </div>
   )
 }

@@ -26,10 +26,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       <TopBar />
       <ApiKeyBanner />
-      <main className="flex-1 flex flex-col">{children}</main>
+      <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
     </div>
   )
 }

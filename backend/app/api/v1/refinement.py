@@ -139,7 +139,11 @@ async def refine_all_questions(
         )
 
     await db.commit()
-    return {"message": f"Refinement started for {len(sessions)} questions", "session_count": len(sessions)}
+    return {
+        "message": f"Refinement started for {len(sessions)} questions",
+        "session_count": len(sessions),
+        "session_ids": [s.id for s in sessions],
+    }
 
 
 @router.get("/refinement-sessions/{session_id}", response_model=RefinementSessionOut)

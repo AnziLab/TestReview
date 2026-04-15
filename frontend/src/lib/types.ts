@@ -7,6 +7,8 @@ export interface User {
   role: 'teacher' | 'admin'
   status: 'pending' | 'approved' | 'rejected'
   has_api_key: boolean
+  grading_extra_instructions?: string | null
+  clustering_extra_instructions?: string | null
 }
 
 export interface Exam {
@@ -47,6 +49,7 @@ export interface Class {
   ocr_status: 'pending' | 'processing' | 'done' | 'failed'
   ocr_error?: string
   student_count?: number
+  source_pdf_filename?: string
 }
 
 export interface Student {

@@ -99,13 +99,24 @@ async def create_class(
     rel_path = f"classes/{exam_id}/{uuid.uuid4()}{ext}"
     saved_path = await storage.save(data, rel_path)
 
+    # PDF 페이지 수 미리 계산
+    import fitz as _fitz, io as _io
+    try:
+        _doc = _fitz.open(stream=_io.BytesIO(data), filetype="pdf")
+        pdf_pages = len(_doc)
+        _doc.close()
+    except Exception:
+        pdf_pages = None
+
     cls = Class(
         exam_id=exam_id,
         name=name,
         scan_mode=scan_mode,
         source_pdf_filename=file.filename,
         source_pdf_path=saved_path,
+        source_pdf_pages=pdf_pages,
         ocr_status="pending",
+        students_processed=0,
     )
     db.add(cls)
     await db.commit()
@@ -127,12 +138,18 @@ async def ocr_status(
         select(func.count()).select_from(Student).where(Student.class_id == class_id)
     )
     students_count = count_result.scalar_one()
-    return OcrStatusOut(
-        id=cls.id,
-        ocr_status=cls.ocr_status,
-        ocr_error=cls.ocr_error,
-        students_count=students_count,
-    )
+    pages = cls.source_pdf_pages or 0
+    pages_per_student = 2 if cls.scan_mode == "double" else 1
+    total_estimated = pages // pages_per_student if pages else None
+
+    return {
+        "id": cls.id,
+        "ocr_status": cls.ocr_status,
+        "ocr_error": cls.ocr_error,
+        "students_count": students_count,
+        "students_processed": cls.students_processed,
+        "total_estimated": total_estimated,
+    }
 
 
 @router.delete("/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)

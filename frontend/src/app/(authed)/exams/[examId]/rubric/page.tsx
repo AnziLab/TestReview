@@ -22,6 +22,7 @@ export default function RubricPage({
     () => questionsApi.list(numericId)
   )
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [viewMode, setViewMode] = useState<'edit' | 'all'>('edit')
 
   // File upload state
   const fileRef = useRef<HTMLInputElement>(null)
@@ -149,12 +150,74 @@ export default function RubricPage({
   // 문항 있음 → 기존 에디터 + 상단 재업로드 옵션
   const activeQuestion = selectedId ? questions.find((q) => q.id === selectedId) : questions[0]
 
+  if (viewMode === 'all') {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white flex-shrink-0">
+          <h2 className="font-semibold text-gray-900">채점기준표 전체 보기</h2>
+          <button
+            onClick={() => setViewMode('edit')}
+            className="text-sm border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
+          >
+            편집 모드로
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="border border-gray-300 px-3 py-2 text-left font-medium text-gray-600 w-16">번호</th>
+                <th className="border border-gray-300 px-3 py-2 text-center font-medium text-gray-600 w-14">배점</th>
+                <th className="border border-gray-300 px-3 py-2 text-left font-medium text-gray-600 w-1/3">모범답안</th>
+                <th className="border border-gray-300 px-3 py-2 text-left font-medium text-gray-600">채점기준</th>
+              </tr>
+            </thead>
+            <tbody>
+              {questions.map((q) => (
+                <tr key={q.id} className="hover:bg-blue-50/30">
+                  <td className="border border-gray-300 px-3 py-2 font-medium text-gray-800 align-top">{q.number}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-center text-gray-700 align-top">{q.max_score}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-gray-700 align-top whitespace-pre-wrap">{q.model_answer || '-'}</td>
+                  <td className="border border-gray-300 px-3 py-2 align-top">
+                    {(q.rubric_json?.criteria ?? []).length > 0 ? (
+                      <ul className="space-y-0.5">
+                        {q.rubric_json.criteria.map((c, i) => (
+                          <li key={i} className="flex gap-2 text-gray-700">
+                            <span className="text-blue-600 font-medium flex-shrink-0">{c.points}점</span>
+                            <span>{c.description}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="text-gray-400 text-xs">-</span>
+                    )}
+                    {q.rubric_json?.notes && (
+                      <p className="text-xs text-gray-400 mt-1 italic">{q.rubric_json.notes}</p>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* Sidebar — fixed height, scrolls independently */}
       <div className="w-48 border-r border-gray-200 bg-white flex-shrink-0 flex flex-col">
         <div className="p-3 border-b border-gray-200 space-y-1 flex-shrink-0">
-          <p className="text-xs font-medium text-gray-500">문항 목록</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-gray-500">문항 목록</p>
+            <button
+              onClick={() => setViewMode('all')}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              전체 보기
+            </button>
+          </div>
           <button
             onClick={() => fileRef.current?.click()}
             className="text-xs text-blue-600 hover:underline"
@@ -212,10 +275,27 @@ export default function RubricPage({
       <div className="flex-1 overflow-y-auto p-6">
         {activeQuestion && (
           <div className="max-w-2xl">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">문항 {activeQuestion.number}</h2>
-              <p className="text-sm text-gray-500">배점: {activeQuestion.max_score}점</p>
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">문항 {activeQuestion.number}</h2>
+                <p className="text-sm text-gray-500">배점: {activeQuestion.max_score}점</p>
+              </div>
             </div>
+
+            {/* 시험지 업로드 (문항 맥락) */}
+            <ExamPaperUploader examId={numericId} hasContext={!!activeQuestion.question_text} onDone={mutate} />
+
+            {/* 문항 맥락 표시 */}
+            {activeQuestion.question_text && (
+              <details className="mb-4">
+                <summary className="cursor-pointer text-sm font-medium text-gray-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 hover:bg-blue-100">
+                  문항 맥락 보기 (지문+질문)
+                </summary>
+                <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{activeQuestion.question_text}</pre>
+                </div>
+              </details>
+            )}
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-4">
               <label className="text-sm font-medium text-gray-700 block mb-1">모범 답안</label>
@@ -227,9 +307,7 @@ export default function RubricPage({
                 onBlur={async (e) => {
                   try {
                     await questionsApi.update(activeQuestion.id, { model_answer: e.target.value })
-                  } catch {
-                    // ignore
-                  }
+                  } catch { /* ignore */ }
                 }}
                 placeholder="모범 답안을 입력하세요"
               />
@@ -245,6 +323,112 @@ export default function RubricPage({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── 시험지 업로드 컴포넌트 ─────────────────────────────────────────────────
+
+function ExamPaperUploader({ examId, hasContext, onDone }: {
+  examId: number
+  hasContext: boolean
+  onDone: () => void
+}) {
+  const paperRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false)
+  const [from, setFrom] = useState(1)
+  const [to, setTo] = useState(9)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const [pollingUrl, setPollingUrl] = useState<string | null>(null)
+
+  const { data: status } = usePolling<{ status: string }>(
+    pollingUrl,
+    2000,
+    (d) => {
+      if (d.status === 'done') { onDone(); setPollingUrl(null); setOpen(false); return true }
+      if (d.status === 'failed') { setError('추출 실패. 다시 시도해주세요.'); setPollingUrl(null); return true }
+      return false
+    }
+  )
+
+  const isExtracting = !!pollingUrl && status?.status === 'processing'
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setUploading(true)
+    setError('')
+    try {
+      const form = new FormData()
+      form.append('file', f)
+      const { apiFetch } = await import('@/lib/api/client')
+      await apiFetch(`/exams/${examId}/exam-paper?question_from=${from}&question_to=${to}`, {
+        method: 'POST',
+        body: form,
+        skipContentType: true,
+      } as Parameters<typeof apiFetch>[1])
+      setPollingUrl(`/exams/${examId}/exam-paper-status`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '업로드 실패')
+    } finally {
+      setUploading(false)
+      if (paperRef.current) paperRef.current.value = ''
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className={`mb-4 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+          hasContext
+            ? 'border-blue-200 text-blue-600 hover:bg-blue-50'
+            : 'border-orange-200 text-orange-600 hover:bg-orange-50'
+        }`}
+      >
+        {hasContext ? '시험지 재업로드' : '⚠ 시험지 업로드 (문항 맥락 없음)'}
+      </button>
+    )
+  }
+
+  return (
+    <div className="mb-4 bg-white border border-gray-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-medium text-gray-800">시험지 업로드</p>
+        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-xs">닫기</button>
+      </div>
+      <p className="text-xs text-gray-500 mb-3">
+        시험지 PDF를 올리면 Gemini가 지문과 문항 텍스트를 추출해 채점기준 정제 시 활용합니다.
+      </p>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-sm text-gray-600">문항 범위:</span>
+        <input type="number" min={1} value={from} onChange={e => setFrom(Number(e.target.value))}
+          className="border border-gray-300 rounded px-2 py-1 w-16 text-sm text-center" />
+        <span className="text-sm text-gray-400">번 ~</span>
+        <input type="number" min={from} value={to} onChange={e => setTo(Number(e.target.value))}
+          className="border border-gray-300 rounded px-2 py-1 w-16 text-sm text-center" />
+        <span className="text-sm text-gray-600">번</span>
+        <span className="text-xs text-gray-400">(하위 문항 포함)</span>
+      </div>
+      {isExtracting ? (
+        <div className="flex items-center gap-2 text-sm text-blue-600">
+          <div className="h-4 w-4 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />
+          문항 텍스트 추출 중...
+        </div>
+      ) : (
+        <>
+          <button
+            onClick={() => paperRef.current?.click()}
+            disabled={uploading}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-50"
+          >
+            {uploading ? '업로드 중...' : 'PDF 선택 및 업로드'}
+          </button>
+          <input ref={paperRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleUpload} />
+        </>
+      )}
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
     </div>
   )
 }

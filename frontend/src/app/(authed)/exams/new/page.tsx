@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { examsApi, questionsApi } from '@/lib/api/exams'
@@ -20,11 +20,14 @@ export default function NewExamPage() {
   const router = useRouter()
   const [step, setStep] = useState<Step>(1)
   const [exam, setExam] = useState<Exam | null>(null)
+  const [mode, setMode] = useState<'choose' | 'rubric' | 'generate'>('choose')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [pollingUrl, setPollingUrl] = useState<string | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
+  const [qFrom, setQFrom] = useState(1)
+  const [qTo, setQTo] = useState(9)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const { data: extractionStatus, error: pollingError } = usePolling<{
@@ -63,19 +66,29 @@ export default function NewExamPage() {
     if (f) setFile(f)
   }
 
-  const handleUpload = async () => {
+  const handleUpload = useCallback(async () => {
     if (!exam || !file) return
     setUploading(true)
     setUploadError('')
     try {
-      await examsApi.uploadRubricFile(exam.id, file)
-      setPollingUrl(`/exams/${exam.id}/rubric-extraction`)
+      if (mode === 'rubric') {
+        await examsApi.uploadRubricFile(exam.id, file)
+        setPollingUrl(`/exams/${exam.id}/rubric-extraction`)
+      } else {
+        const form = new FormData()
+        form.append('file', file)
+        const { apiFetch } = await import('@/lib/api/client')
+        await apiFetch(`/exams/${exam.id}/generate-rubric?question_from=${qFrom}&question_to=${qTo}`, {
+          method: 'POST', body: form, skipContentType: true,
+        } as Parameters<typeof apiFetch>[1])
+        setPollingUrl(`/exams/${exam.id}/rubric-extraction`)
+      }
       setUploading(false)
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : '업로드 실패')
       setUploading(false)
     }
-  }
+  }, [exam, file, mode, qFrom, qTo])
 
   const handleUpdateQuestion = (idx: number, field: 'number' | 'max_score' | 'model_answer', value: string | number) => {
     setQuestions((prev) => {
@@ -191,79 +204,102 @@ export default function NewExamPage() {
       {/* Step 2 */}
       {step === 2 && exam && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="font-medium text-gray-800 mb-2">채점기준표 파일 업로드</h2>
-          <p className="text-sm text-gray-500 mb-4">PDF 또는 HWPX 파일을 업로드하면 Gemini가 문항을 자동으로 추출합니다.</p>
 
-          {!isExtracting && !extractFailed && (
+          {/* 모드 선택 */}
+          {mode === 'choose' && (
             <>
-              <div
-                onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
-              >
-                <svg className="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                {file ? (
-                  <p className="text-sm font-medium text-blue-700">{file.name}</p>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-600">파일을 클릭하거나 드래그하여 업로드</p>
-                    <p className="text-xs text-gray-400 mt-1">PDF 지원</p>
-                  </>
-                )}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-              </div>
-              {uploadError && <p className="text-sm text-red-600 mt-2">{uploadError}</p>}
-              <div className="flex justify-between mt-4">
+              <h2 className="font-medium text-gray-800 mb-4">채점기준 설정 방식 선택</h2>
+              <div className="grid grid-cols-2 gap-4 mb-6">
                 <button
-                  onClick={() => setStep(1)}
-                  className="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm"
+                  onClick={() => setMode('rubric')}
+                  className="border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-xl p-6 text-left transition-colors"
                 >
-                  ← 이전
+                  <div className="text-2xl mb-2">📄</div>
+                  <p className="font-medium text-gray-900">채점기준표 파일 업로드</p>
+                  <p className="text-xs text-gray-500 mt-1">이미 작성된 채점기준표 PDF가 있는 경우</p>
                 </button>
                 <button
-                  onClick={handleUpload}
-                  disabled={!file || uploading}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                  onClick={() => setMode('generate')}
+                  className="border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-xl p-6 text-left transition-colors"
                 >
-                  {uploading ? '업로드 중...' : '업로드 및 추출 시작'}
+                  <div className="text-2xl mb-2">✨</div>
+                  <p className="font-medium text-gray-900">시험지에서 초안 생성</p>
+                  <p className="text-xs text-gray-500 mt-1">시험지 PDF만 있으면 Gemini가 채점기준 초안을 자동 생성</p>
                 </button>
               </div>
+              <button onClick={() => setStep(1)} className="text-sm text-gray-400 hover:text-gray-600">← 이전</button>
             </>
           )}
 
-          {isExtracting && (
-            <div className="text-center py-8">
-              <svg className="animate-spin h-10 w-10 text-blue-600 mx-auto mb-3" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <p className="text-gray-700 font-medium">Gemini가 문항을 추출하고 있습니다...</p>
-              <p className="text-sm text-gray-400 mt-1">잠시 기다려 주세요.</p>
-            </div>
-          )}
+          {/* 채점기준표 업로드 or 초안 생성 */}
+          {(mode === 'rubric' || mode === 'generate') && (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <button onClick={() => { setMode('choose'); setFile(null); setPollingUrl(null); setUploadError('') }}
+                  className="text-gray-400 hover:text-gray-600">←</button>
+                <h2 className="font-medium text-gray-800">
+                  {mode === 'rubric' ? '채점기준표 업로드' : '시험지에서 초안 생성'}
+                </h2>
+              </div>
 
-          {extractFailed && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-              <p className="font-medium">추출 실패</p>
-              <p className="text-sm mt-1">파일을 다시 확인하고 재시도하세요.</p>
-              <button
-                onClick={() => {
-                  setPollingUrl(null)
-                  setFile(null)
-                  setUploading(false)
-                }}
-                className="mt-3 border border-red-300 hover:bg-red-100 px-3 py-1.5 rounded-lg text-sm"
-              >
-                다시 시도
-              </button>
-            </div>
+              {mode === 'generate' && !isExtracting && !extractFailed && (
+                <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 rounded-lg">
+                  <span className="text-sm text-gray-700">문항 범위:</span>
+                  <input type="number" min={1} value={qFrom} onChange={e => setQFrom(Number(e.target.value))}
+                    className="border border-gray-300 rounded px-2 py-1 w-16 text-sm text-center" />
+                  <span className="text-sm text-gray-500">번 ~</span>
+                  <input type="number" min={qFrom} value={qTo} onChange={e => setQTo(Number(e.target.value))}
+                    className="border border-gray-300 rounded px-2 py-1 w-16 text-sm text-center" />
+                  <span className="text-sm text-gray-700">번</span>
+                  <span className="text-xs text-gray-400">(하위 문항 포함)</span>
+                </div>
+              )}
+
+              {!isExtracting && !extractFailed && (
+                <>
+                  <div onClick={() => fileRef.current?.click()}
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                    <svg className="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    {file
+                      ? <p className="text-sm font-medium text-blue-700">{file.name}</p>
+                      : <><p className="text-sm text-gray-600">파일을 클릭하거나 드래그하여 업로드</p><p className="text-xs text-gray-400 mt-1">PDF 지원</p></>
+                    }
+                    <input ref={fileRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileChange} />
+                  </div>
+                  {uploadError && <p className="text-sm text-red-600 mt-2">{uploadError}</p>}
+                  <div className="flex justify-between mt-4">
+                    <button onClick={() => setStep(1)} className="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">← 이전</button>
+                    <button onClick={handleUpload} disabled={!file || uploading}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50">
+                      {uploading ? '업로드 중...' : mode === 'rubric' ? '업로드 및 추출' : '업로드 및 초안 생성'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {isExtracting && (
+                <div className="text-center py-8">
+                  <div className="h-10 w-10 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin mx-auto mb-3" />
+                  <p className="text-gray-700 font-medium">
+                    {mode === 'rubric' ? 'Gemini가 채점기준을 추출하고 있습니다...' : 'Gemini가 채점기준 초안을 생성하고 있습니다...'}
+                  </p>
+                  <p className="text-sm text-gray-400 mt-1">잠시 기다려 주세요. {mode === 'generate' && '(초안 생성은 1~2분 소요될 수 있습니다)'}</p>
+                </div>
+              )}
+
+              {extractFailed && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+                  <p className="font-medium">실패</p>
+                  <p className="text-sm mt-1">파일을 다시 확인하고 재시도하세요.</p>
+                  <button onClick={() => { setPollingUrl(null); setFile(null); setUploading(false) }}
+                    className="mt-3 border border-red-300 hover:bg-red-100 px-3 py-1.5 rounded-lg text-sm">
+                    다시 시도
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

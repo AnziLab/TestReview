@@ -10,24 +10,24 @@ import type { RubricJson } from '@/lib/types'
 interface RubricEditorProps {
   questionId: string
   initialRubric: RubricJson
-  onCommit?: () => void
 }
 
-function normalizeRubric(rubric: RubricJson): RubricJson {
+function normalizeRubric(rubric: RubricJson | null | undefined): RubricJson {
+  if (!rubric) return { criteria: [], notes: '' }
   return {
     ...rubric,
     notes: rubric.notes ?? '',
     criteria: (rubric.criteria ?? []).map((c) => ({
       ...c,
       id: c.id || uuidv4(),
+      description: c.description ?? '',
       points: c.points ?? 0,
     })),
   }
 }
 
-export function RubricEditor({ questionId, initialRubric, onCommit }: RubricEditorProps) {
+export function RubricEditor({ questionId, initialRubric }: RubricEditorProps) {
   const [rubric, setRubric] = useState<RubricJson>(() => normalizeRubric(initialRubric))
-  const [committing, setCommitting] = useState(false)
   const { status, lastSavedAt } = useAutosave(questionId, rubric)
 
   useEffect(() => {
@@ -54,18 +54,6 @@ export function RubricEditor({ questionId, initialRubric, onCommit }: RubricEdit
       ...prev,
       criteria: prev.criteria.filter((_, i) => i !== idx),
     }))
-  }
-
-  const handleCommit = async () => {
-    setCommitting(true)
-    try {
-      await questionsApi.commitRubricDraft(Number(questionId))
-      onCommit?.()
-    } catch (e) {
-      alert(`확정 실패: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setCommitting(false)
-    }
   }
 
   return (
@@ -128,15 +116,6 @@ export function RubricEditor({ questionId, initialRubric, onCommit }: RubricEdit
         />
       </div>
 
-      <div className="flex justify-end">
-        <button
-          onClick={handleCommit}
-          disabled={committing}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
-        >
-          {committing ? '확정 중...' : '채점기준 확정'}
-        </button>
-      </div>
     </div>
   )
 }

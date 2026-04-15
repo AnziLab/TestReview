@@ -37,6 +37,8 @@ class UserOut(BaseModel):
     role: str
     status: str
     has_api_key: bool = False
+    grading_extra_instructions: Optional[str] = None
+    clustering_extra_instructions: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

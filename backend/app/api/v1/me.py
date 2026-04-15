@@ -17,6 +17,8 @@ class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     school: Optional[str] = None
     email: Optional[EmailStr] = None
+    grading_extra_instructions: Optional[str] = None
+    clustering_extra_instructions: Optional[str] = None
 
 
 class ApiKeyRequest(BaseModel):

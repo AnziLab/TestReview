@@ -44,6 +44,16 @@ async def list_questions(
     return result.scalars().all()
 
 
+@router.get("/questions/{question_id}", response_model=QuestionOut)
+async def get_question(
+    question_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    question = await _get_question_owned(question_id, current_user.id, db)
+    return question
+
+
 @router.post("/exams/{exam_id}/questions", response_model=QuestionOut, status_code=status.HTTP_201_CREATED)
 async def create_question(
     exam_id: int,

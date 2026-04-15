@@ -21,6 +21,8 @@ class Class(Base):
     source_pdf_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     ocr_status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     ocr_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_pdf_pages: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    students_processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), server_default=func.now(), nullable=False
     )

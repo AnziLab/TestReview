@@ -16,6 +16,76 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 
 
+async def _grade_question(db, client, question, extra_instructions: str | None = None) -> None:
+    """문항 1개 채점 (upsert). 공통 로직."""
+    from app.gemini.grading import grade_answers
+
+    answers = (await db.execute(
+        select(Answer).where(Answer.question_id == question.id)
+    )).scalars().all()
+    if not answers:
+        return
+
+    answer_dicts = [{"id": a.id, "text": a.answer_text} for a in answers]
+    grading_results = await grade_answers(
+        client, question.rubric_json, answer_dicts,
+        model_answer=question.model_answer,
+        max_score=float(question.max_score),
+        question_text=question.question_text,
+        extra_instructions=extra_instructions,
+    )
+
+    answer_ids = [r.get("answer_id") for r in grading_results if r.get("answer_id")]
+    existing = {
+        g.answer_id: g for g in (
+            await db.execute(select(Grading).where(Grading.answer_id.in_(answer_ids)))
+        ).scalars().all()
+    }
+
+    for result in grading_results:
+        answer_id = result.get("answer_id")
+        if answer_id is None:
+            continue
+        g = existing.get(answer_id)
+        if g is None:
+            db.add(Grading(
+                answer_id=answer_id,
+                score=float(result.get("score", 0)),
+                matched_criteria_ids=result.get("matched_criteria_ids"),
+                rationale=result.get("rationale"),
+                graded_by="auto",
+                rubric_version=question.rubric_version,
+            ))
+        else:
+            g.score = float(result.get("score", 0))
+            g.matched_criteria_ids = result.get("matched_criteria_ids")
+            g.rationale = result.get("rationale")
+            g.graded_by = "auto"
+            g.rubric_version = question.rubric_version
+            g.updated_at = datetime.now(timezone.utc)
+
+    await db.flush()
+
+
+async def run_grading_question(question_id: int, teacher_id: int) -> None:
+    """BackgroundTask: 문항 1개만 재채점."""
+    async with AsyncSessionLocal() as db:
+        from app.models.exam import Question
+        question = await db.get(Question, question_id)
+        if not question:
+            return
+        teacher = await db.get(User, teacher_id)
+        if not teacher or not teacher.gemini_api_key_encrypted:
+            return
+        try:
+            client = get_gemini_client(teacher.gemini_api_key_encrypted)
+            await _grade_question(db, client, question)
+            await db.commit()
+            logger.info(f"Re-grading done for question {question_id}")
+        except Exception as exc:
+            logger.exception(f"Re-grading failed for question {question_id}: {exc}")
+
+
 async def run_grading(exam_id: int, teacher_id: int) -> None:
     """BackgroundTask: auto-grade all answers for an exam question by question."""
     async with AsyncSessionLocal() as db:
@@ -37,53 +107,11 @@ async def run_grading(exam_id: int, teacher_id: int) -> None:
             questions = questions_result.scalars().all()
 
             for question in questions:
-                answers_result = await db.execute(
-                    select(Answer).where(Answer.question_id == question.id)
-                )
-                answers = answers_result.scalars().all()
-                if not answers:
-                    continue
-
-                answer_dicts = [
-                    {"id": a.id, "text": a.answer_text} for a in answers
-                ]
-
                 try:
-                    grading_results = await grade_answers(
-                        client, question.rubric_json, answer_dicts
-                    )
+                    await _grade_question(db, client, question, teacher.grading_extra_instructions)
                 except Exception as exc:
                     logger.warning(f"Grading failed for question {question.id}: {exc}")
                     continue
-
-                for result in grading_results:
-                    answer_id = result.get("answer_id")
-                    if answer_id is None:
-                        continue
-
-                    # Upsert grading
-                    existing = await db.execute(
-                        select(Grading).where(Grading.answer_id == answer_id)
-                    )
-                    grading = existing.scalar_one_or_none()
-
-                    if grading is None:
-                        grading = Grading(
-                            answer_id=answer_id,
-                            score=float(result.get("score", 0)),
-                            matched_criteria_ids=result.get("matched_criteria_ids"),
-                            rationale=result.get("rationale"),
-                            graded_by="auto",
-                            rubric_version=question.rubric_version,
-                        )
-                        db.add(grading)
-                    else:
-                        grading.score = float(result.get("score", 0))
-                        grading.matched_criteria_ids = result.get("matched_criteria_ids")
-                        grading.rationale = result.get("rationale")
-                        grading.graded_by = "auto"
-                        grading.rubric_version = question.rubric_version
-                        grading.updated_at = datetime.now(timezone.utc)
 
             exam.status = "graded"
             await db.commit()

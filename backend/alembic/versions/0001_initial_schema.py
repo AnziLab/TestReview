@@ -160,7 +160,7 @@ def upgrade() -> None:
         "cluster_members",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("cluster_id", sa.Integer(), sa.ForeignKey("answer_clusters.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("answer_id", sa.Integer(), sa.ForeignKey("answers.id"), nullable=False),
+        sa.Column("answer_id", sa.Integer(), sa.ForeignKey("answers.id", ondelete="CASCADE"), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("cluster_id", "answer_id", name="uq_cluster_member"),
     )

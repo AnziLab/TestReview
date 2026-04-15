@@ -51,6 +51,10 @@ async def run_refinement(session_id: int, question_id: int, teacher_id: int) -> 
                 client,
                 question.rubric_json,
                 answer_dicts,
+                model_answer=question.model_answer,
+                max_score=float(question.max_score),
+                question_text=question.question_text,
+                extra_instructions=teacher.clustering_extra_instructions,
             )
 
             # Build answer id → Answer map

@@ -94,6 +94,8 @@ export const classesApi = {
     apiFetch<{ ocr_status: Class['ocr_status']; students_count?: number; error?: string }>(`/classes/${id}/ocr-status`),
 
   getStudents: (id: number) => apiFetch<Student[]>(`/classes/${id}/students`),
+
+  delete: (id: number) => apiFetch<void>(`/classes/${id}`, { method: 'DELETE' }),
 }
 
 export const studentsApi = {
@@ -101,6 +103,14 @@ export const studentsApi = {
     apiFetch<Student>(`/students/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   getAnswers: (id: number) => apiFetch<Answer[]>(`/students/${id}/answers`),
+}
+
+export const answersApi = {
+  update: (id: number, answer_text: string) =>
+    apiFetch<Answer>(`/answers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ answer_text }),
+    }),
 }
 
 export const meApi = {

@@ -40,6 +40,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshUser()
   }, [refreshUser])
 
+  // 탭 포커스 복귀 시 토큰 재확인 (장시간 작업 후 강제 로그아웃 방지)
+  useEffect(() => {
+    const onFocus = () => refreshUser()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refreshUser])
+
   const login = async (username: string, password: string) => {
     const res = await authApi.login({ username, password })
     localStorage.setItem('access_token', res.access_token)
