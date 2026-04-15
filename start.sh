@@ -39,7 +39,7 @@ echo "  ✓ DB 준비 완료"
 echo "[4/4] 서버 시작..."
 cd "$BACKEND_DIR"
 source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload &
 BACKEND_PID=$!
 
 cd "$FRONTEND_DIR"
