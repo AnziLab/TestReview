@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { authApi } from '@/lib/api/auth'
+import { Button, Card, Input } from '@/components/ui'
 
 interface FormData {
   username: string
@@ -42,105 +43,75 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-8">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">회원가입</h1>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">아이디</label>
-            <input
-              className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 py-8">
+      <div className="w-full max-w-[400px] px-4">
+        <Card padding="lg">
+          <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">회원가입</h1>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <Input
+              label="아이디"
               placeholder="사용할 아이디"
+              error={errors.username?.message}
               {...register('username', {
                 required: '아이디를 입력하세요.',
                 minLength: { value: 3, message: '3자 이상 입력하세요.' },
               })}
             />
-            {errors.username && (
-              <p className="text-sm text-red-600 mt-1">{errors.username.message}</p>
-            )}
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">이메일</label>
-            <input
+            <Input
               type="email"
-              className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              label="이메일"
               placeholder="이메일 주소"
+              error={errors.email?.message}
               {...register('email', {
                 required: '이메일을 입력하세요.',
                 pattern: { value: /^\S+@\S+\.\S+$/, message: '올바른 이메일 형식이 아닙니다.' },
               })}
             />
-            {errors.email && (
-              <p className="text-sm text-red-600 mt-1">{errors.email.message}</p>
-            )}
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">이름</label>
-            <input
-              className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            <Input
+              label="이름"
               placeholder="실명"
+              error={errors.full_name?.message}
               {...register('full_name', { required: '이름을 입력하세요.' })}
             />
-            {errors.full_name && (
-              <p className="text-sm text-red-600 mt-1">{errors.full_name.message}</p>
-            )}
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">학교</label>
-            <input
-              className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            <Input
+              label="학교"
               placeholder="소속 학교 (선택)"
               {...register('school')}
             />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">비밀번호</label>
-            <input
+            <Input
               type="password"
-              className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              label="비밀번호"
               placeholder="비밀번호 (8자 이상)"
+              error={errors.password?.message}
               {...register('password', {
                 required: '비밀번호를 입력하세요.',
                 minLength: { value: 8, message: '8자 이상 입력하세요.' },
               })}
             />
-            {errors.password && (
-              <p className="text-sm text-red-600 mt-1">{errors.password.message}</p>
-            )}
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">비밀번호 확인</label>
-            <input
+            <Input
               type="password"
-              className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              label="비밀번호 확인"
               placeholder="비밀번호 재입력"
+              error={errors.password_confirm?.message}
               {...register('password_confirm', {
                 required: '비밀번호를 재입력하세요.',
                 validate: (v) => v === watch('password') || '비밀번호가 일치하지 않습니다.',
               })}
             />
-            {errors.password_confirm && (
-              <p className="text-sm text-red-600 mt-1">{errors.password_confirm.message}</p>
+            {errors.root && (
+              <p className="text-xs text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{errors.root.message}</p>
             )}
-          </div>
-          {errors.root && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{errors.root.message}</p>
-          )}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full font-medium disabled:opacity-50"
-          >
-            {isSubmitting ? '가입 중...' : '가입 신청'}
-          </button>
-        </form>
-        <p className="text-sm text-center text-gray-500 mt-4">
-          이미 계정이 있으신가요?{' '}
-          <Link href="/login" className="text-blue-600 hover:underline">
-            로그인
-          </Link>
-        </p>
+            <Button type="submit" variant="primary" size="lg" loading={isSubmitting} className="w-full">
+              {isSubmitting ? '가입 중...' : '가입 신청'}
+            </Button>
+          </form>
+          <p className="text-sm text-center text-slate-500 mt-4">
+            이미 계정이 있으신가요?{' '}
+            <Link href="/login" className="text-indigo-600 hover:underline">
+              로그인
+            </Link>
+          </p>
+        </Card>
       </div>
     </div>
   )

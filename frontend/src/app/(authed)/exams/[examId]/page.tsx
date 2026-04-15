@@ -5,6 +5,7 @@ import Link from 'next/link'
 import useSWR from 'swr'
 import { examsApi, questionsApi, classesApi } from '@/lib/api/exams'
 import type { Exam } from '@/lib/types'
+import { Card, Spinner } from '@/components/ui'
 
 const stepDefs = [
   {
@@ -49,11 +50,11 @@ export default function ExamHubPage({
   const { data: classes } = useSWR(`exams/${numericId}/classes`, () => classesApi.list(numericId))
 
   if (examError) return (
-    <div className="p-6 text-center text-red-600">시험 정보를 불러오지 못했습니다.</div>
+    <div className="p-6 text-center text-rose-600">시험 정보를 불러오지 못했습니다.</div>
   )
   if (!exam) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="h-8 w-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+      <Spinner size="lg" />
     </div>
   )
 
@@ -65,9 +66,9 @@ export default function ExamHubPage({
   return (
     <div className="p-6 max-w-3xl mx-auto w-full">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{exam.title}</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{exam.title}</h1>
         {exam.subject && (
-          <p className="text-gray-500 text-sm mt-1">{exam.subject}{exam.grade ? ` · ${exam.grade}학년` : ''}</p>
+          <p className="text-slate-500 text-sm mt-1">{exam.subject}{exam.grade ? ` · ${exam.grade}학년` : ''}</p>
         )}
       </div>
 
@@ -77,24 +78,17 @@ export default function ExamHubPage({
           const isActive = idx === activeIdx
           const isLocked = idx > activeIdx && !isDone
 
-          return (
-            <Link
+          const cardContent = (
+            <Card
               key={step.key}
-              href={`/exams/${examId}${step.path}`}
-              className={`bg-white rounded-lg shadow-sm border p-5 flex items-center gap-4 transition-colors ${
-                isLocked
-                  ? 'border-gray-200 opacity-50 cursor-not-allowed pointer-events-none'
-                  : isActive
-                  ? 'border-blue-400 hover:bg-blue-50'
-                  : 'border-gray-200 hover:bg-gray-50'
-              }`}
+              interactive={!isLocked}
+              padding="md"
+              className={`flex items-center gap-4 transition-colors ${isLocked ? 'opacity-50' : ''}`}
             >
               <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                isDone
-                  ? 'bg-green-100 text-green-700'
-                  : isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-500'
+                isDone ? 'bg-emerald-50 text-emerald-500'
+                : isActive ? 'bg-indigo-500 text-white'
+                : 'bg-slate-100 text-slate-400'
               }`}>
                 {isDone ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -105,23 +99,29 @@ export default function ExamHubPage({
                 )}
               </div>
               <div className="flex-1">
-                <p className={`font-medium ${isActive ? 'text-blue-700' : 'text-gray-800'}`}>{step.label}</p>
-                <p className="text-sm text-gray-500">{step.desc}</p>
+                <p className={`font-medium ${isActive ? 'text-indigo-700' : 'text-slate-800'}`}>{step.label}</p>
+                <p className="text-sm text-slate-500">{step.desc}</p>
                 {step.key === 'rubric' && questions && (
-                  <p className="text-xs text-gray-400 mt-0.5">{questions.length}개 문항</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{questions.length}개 문항</p>
                 )}
                 {step.key === 'classes' && classes && (
-                  <p className="text-xs text-gray-400 mt-0.5">{classes.length}개 반</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{classes.length}개 반</p>
                 )}
               </div>
               {isActive && (
-                <span className="text-blue-600">
+                <span className="text-indigo-500">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </span>
               )}
-            </Link>
+            </Card>
+          )
+
+          return isLocked ? (
+            <div key={step.key} aria-disabled="true">{cardContent}</div>
+          ) : (
+            <Link key={step.key} href={`/exams/${examId}${step.path}`}>{cardContent}</Link>
           )
         })}
       </div>

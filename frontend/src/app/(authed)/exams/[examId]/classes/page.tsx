@@ -6,6 +6,10 @@ import Link from 'next/link'
 import { classesApi } from '@/lib/api/exams'
 import { usePolling } from '@/lib/hooks/usePolling'
 import type { Class } from '@/lib/types'
+import {
+  Badge, Button, Card, EmptyState, Modal, ProgressBar, Spinner,
+  FileDropzone, Input, useConfirm, useToast,
+} from '@/components/ui'
 
 const ocrStatusLabels: Record<Class['ocr_status'], string> = {
   pending: '대기 중',
@@ -14,11 +18,11 @@ const ocrStatusLabels: Record<Class['ocr_status'], string> = {
   failed: '실패',
 }
 
-const ocrStatusColors: Record<Class['ocr_status'], string> = {
-  pending: 'text-gray-500',
-  processing: 'text-blue-600',
-  done: 'text-green-600',
-  failed: 'text-red-600',
+const ocrStatusTones: Record<Class['ocr_status'], 'neutral' | 'info' | 'success' | 'danger'> = {
+  pending: 'neutral',
+  processing: 'info',
+  done: 'success',
+  failed: 'danger',
 }
 
 function ClassCard({
@@ -30,6 +34,8 @@ function ClassCard({
   examId: string
   onRefresh: () => void
 }) {
+  const confirm = useConfirm()
+  const toast = useToast()
   const [deleting, setDeleting] = useState(false)
   const isProcessing = cls.ocr_status === 'pending' || cls.ocr_status === 'processing'
   const { data: statusData } = usePolling<{
@@ -52,84 +58,96 @@ function ClassCard({
   const currentStatus = statusData?.ocr_status ?? cls.ocr_status
   const processed = statusData?.students_processed ?? 0
   const total = statusData?.total_estimated
-  const pct = total ? Math.min(100, Math.round((processed / total) * 100)) : null
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+    <Card>
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="font-semibold text-gray-900">{cls.name}</h3>
-          <p className="text-sm text-gray-500">
+          <h3 className="font-semibold text-slate-900">{cls.name}</h3>
+          <p className="text-sm text-slate-500">
             {cls.scan_mode === 'single' ? '단면' : '양면'} · {cls.source_pdf_filename || ''}
           </p>
         </div>
-        <span className={`text-sm font-medium ${ocrStatusColors[currentStatus]}`}>
+        <Badge tone={ocrStatusTones[currentStatus]}>
           {ocrStatusLabels[currentStatus]}
-        </span>
+        </Badge>
       </div>
 
       {(currentStatus === 'pending' || currentStatus === 'processing') && (
         <div className="mb-3 space-y-1">
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-              style={{ width: pct != null ? `${pct}%` : '15%' }}
-            />
-          </div>
-          <p className="text-xs text-gray-500">
-            {total
-              ? `${processed} / ${total}명 처리 중 (${pct}%)`
-              : 'OCR 준비 중...'}
-          </p>
+          <ProgressBar
+            value={processed}
+            max={total ?? undefined}
+            label={total ? `${processed} / ${total}명 처리 중` : 'OCR 준비 중...'}
+          />
         </div>
       )}
 
       {cls.ocr_error && (
-        <p className="text-sm text-red-600 mb-2">{cls.ocr_error}</p>
+        <p className="text-sm text-rose-600 mb-2">{cls.ocr_error}</p>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
         <Link
           href={`/exams/${examId}/classes/${cls.id}`}
-          className="text-sm text-blue-600 hover:underline"
+          className="text-sm text-indigo-600 hover:underline"
         >
           학생 목록 보기 →
         </Link>
-        <button
+        <Button
+          variant="danger"
+          size="sm"
+          loading={deleting}
           onClick={async () => {
-            if (!confirm(`"${cls.name}" 반을 삭제하시겠습니까? 학생 답안도 모두 삭제됩니다.`)) return
+            const ok = await confirm({
+              title: `"${cls.name}" 반 삭제`,
+              description: '학생 답안도 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.',
+              tone: 'danger',
+              confirmLabel: '삭제',
+            })
+            if (!ok) return
             setDeleting(true)
             try {
               await classesApi.delete(cls.id)
               onRefresh()
+              toast('반이 삭제되었습니다.', 'success')
             } catch (e) {
-              alert(e instanceof Error ? e.message : '삭제 실패')
+              toast(e instanceof Error ? e.message : '삭제 실패', 'danger')
               setDeleting(false)
             }
           }}
-          disabled={deleting}
-          className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
         >
-          {deleting ? '삭제 중...' : '삭제'}
-        </button>
+          삭제
+        </Button>
       </div>
-    </div>
+    </Card>
   )
 }
 
 interface AddClassModalProps {
   examId: string
+  open: boolean
   onClose: () => void
   onAdded: () => void
 }
 
-function AddClassModal({ examId, onClose, onAdded }: AddClassModalProps) {
+function AddClassModal({ examId, open, onClose, onAdded }: AddClassModalProps) {
+  const toast = useToast()
   const [step, setStep] = useState<'form' | 'confirm'>('form')
   const [name, setName] = useState('')
   const [scanMode, setScanMode] = useState<'single' | 'double'>('single')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+
+  const handleClose = () => {
+    setStep('form')
+    setName('')
+    setScanMode('single')
+    setFile(null)
+    setError('')
+    onClose()
+  }
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault()
@@ -146,7 +164,8 @@ function AddClassModal({ examId, onClose, onAdded }: AddClassModalProps) {
     try {
       await classesApi.create(Number(examId), { name, scan_mode: scanMode }, file)
       onAdded()
-      onClose()
+      handleClose()
+      toast('반이 추가되었습니다. OCR 처리가 시작됩니다.', 'success')
     } catch (e) {
       setError(e instanceof Error ? e.message : '업로드 실패')
       setStep('form')
@@ -156,90 +175,78 @@ function AddClassModal({ examId, onClose, onAdded }: AddClassModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        {step === 'form' ? (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title={step === 'form' ? '반 추가' : 'OCR 시작 확인'}
+      footer={
+        step === 'form' ? (
           <>
-            <h2 className="font-semibold text-gray-900 text-lg mb-4">반 추가</h2>
-            <form onSubmit={handleNext} className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">반 이름 *</label>
-                <input
-                  className="border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="예: 3학년 2반"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-2">스캔 방식</label>
-                <div className="flex gap-4">
-                  {(['single', 'double'] as const).map((mode) => (
-                    <label key={mode} className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" name="scanMode" checked={scanMode === mode}
-                        onChange={() => setScanMode(mode)} className="accent-blue-600" />
-                      <span className="text-sm">{mode === 'single' ? '단면 (학생 1명 = 1페이지)' : '양면 (학생 1명 = 2페이지)'}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">PDF 파일 *</label>
-                <input type="file" accept=".pdf"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="text-sm text-gray-600" />
-                {file && <p className="text-xs text-blue-600 mt-1">선택됨: {file.name}</p>}
-              </div>
-              {error && <p className="text-sm text-red-600">{error}</p>}
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={onClose}
-                  className="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
-                  취소
-                </button>
-                <button type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
-                  다음 →
-                </button>
-              </div>
-            </form>
+            <Button variant="secondary" size="sm" onClick={handleClose}>취소</Button>
+            <Button size="sm" onClick={(e) => handleNext(e as React.FormEvent)}>다음 →</Button>
           </>
         ) : (
           <>
-            <h2 className="font-semibold text-gray-900 text-lg mb-4">OCR 시작 확인</h2>
-            <div className="space-y-3 mb-6">
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">반 이름</span>
-                  <span className="font-medium">{name}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">스캔 방식</span>
-                  <span className="font-medium">{scanMode === 'single' ? '단면' : '양면'}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">파일</span>
-                  <span className="font-medium text-blue-700">{file?.name}</span>
-                </div>
-              </div>
-              <p className="text-sm text-gray-600">
-                업로드 후 Gemini가 각 학생의 답안을 자동으로 인식합니다. 파일이 맞는지 확인해주세요.
-              </p>
-            </div>
-            {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
-            <div className="flex justify-between">
-              <button onClick={() => setStep('form')}
-                className="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
-                ← 수정
-              </button>
-              <button onClick={handleConfirm} disabled={uploading}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
-                {uploading ? '업로드 중...' : 'OCR 시작'}
-              </button>
-            </div>
+            <Button variant="secondary" size="sm" onClick={() => setStep('form')}>← 수정</Button>
+            <Button size="sm" loading={uploading} onClick={handleConfirm}>OCR 시작</Button>
           </>
-        )}
-      </div>
-    </div>
+        )
+      }
+    >
+      {step === 'form' ? (
+        <form onSubmit={handleNext} className="space-y-4">
+          <Input
+            label="반 이름 *"
+            placeholder="예: 3학년 2반"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div>
+            <label className="text-sm font-medium text-slate-700 block mb-2">스캔 방식</label>
+            <div className="flex gap-4">
+              {(['single', 'double'] as const).map((mode) => (
+                <label key={mode} className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="scanMode" checked={scanMode === mode}
+                    onChange={() => setScanMode(mode)} className="accent-indigo-500" />
+                  <span className="text-sm text-slate-700">{mode === 'single' ? '단면 (학생 1명 = 1페이지)' : '양면 (학생 1명 = 2페이지)'}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate-700 block mb-1.5">PDF 파일 *</label>
+            <FileDropzone
+              accept=".pdf"
+              value={file}
+              onChange={setFile}
+              hint="PDF 파일을 클릭하거나 드래그하세요"
+            />
+          </div>
+          {error && <p className="text-sm text-rose-600">{error}</p>}
+        </form>
+      ) : (
+        <div className="space-y-3">
+          <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">반 이름</span>
+              <span className="font-medium text-slate-800">{name}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">스캔 방식</span>
+              <span className="font-medium text-slate-800">{scanMode === 'single' ? '단면' : '양면'}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">파일</span>
+              <span className="font-medium text-indigo-600">{file?.name}</span>
+            </div>
+          </div>
+          <p className="text-sm text-slate-600">
+            업로드 후 Gemini가 각 학생의 답안을 자동으로 인식합니다. 파일이 맞는지 확인해주세요.
+          </p>
+          {error && <p className="text-sm text-rose-600">{error}</p>}
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -258,43 +265,35 @@ export default function ClassesPage({
   return (
     <div className="p-6 max-w-3xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-900">학생 답안 업로드</h1>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-1"
-        >
+        <h1 className="text-xl font-bold text-slate-900">학생 답안 업로드</h1>
+        <Button onClick={() => setShowModal(true)}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           반 추가
-        </button>
+        </Button>
       </div>
 
       {isLoading && (
         <div className="flex justify-center py-12">
-          <svg className="animate-spin h-8 w-8 text-blue-600" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
+          <Spinner size="lg" />
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-700">
           반 목록을 불러오는데 실패했습니다.
         </div>
       )}
 
       {!isLoading && !error && classes && classes.length === 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-10 text-center">
-          <p className="text-gray-500 mb-4">등록된 반이 없습니다.</p>
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
-          >
-            첫 번째 반 추가
-          </button>
-        </div>
+        <EmptyState
+          title="등록된 반이 없습니다."
+          description="학생 답안 PDF를 업로드하여 OCR 처리를 시작하세요."
+          action={
+            <Button onClick={() => setShowModal(true)}>첫 번째 반 추가</Button>
+          }
+        />
       )}
 
       {classes && classes.length > 0 && (
@@ -305,13 +304,12 @@ export default function ClassesPage({
         </div>
       )}
 
-      {showModal && (
-        <AddClassModal
-          examId={examId}
-          onClose={() => setShowModal(false)}
-          onAdded={() => mutate()}
-        />
-      )}
+      <AddClassModal
+        examId={examId}
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        onAdded={() => mutate()}
+      />
     </div>
   )
 }

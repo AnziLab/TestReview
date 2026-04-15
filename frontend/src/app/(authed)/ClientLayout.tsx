@@ -7,6 +7,7 @@ import { TopBar } from '@/components/TopBar'
 import { ApiKeyBanner } from '@/components/ApiKeyBanner'
 import { ToastProvider } from '@/components/ui/useToast'
 import { ConfirmProvider } from '@/components/ui/useConfirm'
+import { Spinner } from '@/components/ui'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -22,7 +23,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   if (loading || !user || user.status !== 'approved') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="h-8 w-8 rounded-full border-2 border-indigo-100 border-t-indigo-500 animate-spin" />
+        <Spinner size="lg" />
       </div>
     )
   }

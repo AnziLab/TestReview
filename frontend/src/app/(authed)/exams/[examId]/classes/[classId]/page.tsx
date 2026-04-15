@@ -4,6 +4,7 @@ import { use, useState } from 'react'
 import useSWR from 'swr'
 import { classesApi, studentsApi, questionsApi, answersApi } from '@/lib/api/exams'
 import type { Student, Answer, Question } from '@/lib/types'
+import { Button, Card, Spinner, useToast } from '@/components/ui'
 
 export default function ClassDetailPage({
   params,
@@ -26,7 +27,7 @@ export default function ClassDetailPage({
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <div className="h-8 w-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+        <Spinner size="lg" />
       </div>
     )
   }
@@ -34,7 +35,7 @@ export default function ClassDetailPage({
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-700">
           학생 목록을 불러오는데 실패했습니다.
         </div>
       </div>
@@ -45,25 +46,25 @@ export default function ClassDetailPage({
     <div className="flex h-full overflow-hidden">
       {/* 왼쪽: 학생 목록 */}
       <div className={`flex flex-col overflow-hidden transition-all ${selectedStudent ? 'w-1/2' : 'w-full'}`}>
-        <div className="p-4 border-b border-gray-200 flex-shrink-0">
-          <h1 className="text-lg font-bold text-gray-900">{cls?.name ?? '반 상세'}</h1>
-          <p className="text-sm text-gray-500">{students?.length ?? 0}명</p>
+        <div className="p-4 border-b border-slate-200 flex-shrink-0">
+          <h1 className="text-lg font-bold text-slate-900">{cls?.name ?? '반 상세'}</h1>
+          <p className="text-sm text-slate-500">{students?.length ?? 0}명</p>
         </div>
 
         <div className="flex-1 overflow-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+            <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">학번</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">이름</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">학번</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">이름</th>
                 {!selectedStudent && questions?.map((q) => (
-                  <th key={q.id} className="px-4 py-3 text-left text-xs font-medium text-gray-500 max-w-[120px]">
+                  <th key={q.id} className="px-4 py-3 text-left text-xs font-medium text-slate-500 max-w-[120px]">
                     {q.number}번
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {students?.map((student) => (
                 <StudentRow
                   key={student.id}
@@ -80,23 +81,23 @@ export default function ClassDetailPage({
             </tbody>
           </table>
           {(!students || students.length === 0) && (
-            <div className="py-8 text-center text-gray-400 text-sm">학생 데이터가 없습니다.</div>
+            <div className="py-8 text-center text-slate-400 text-sm">학생 데이터가 없습니다.</div>
           )}
         </div>
       </div>
 
       {/* 오른쪽: 답안 수정 패널 */}
       {selectedStudent && (
-        <div className="w-1/2 border-l border-gray-200 flex flex-col overflow-hidden bg-white">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+        <div className="w-1/2 border-l border-slate-200 flex flex-col overflow-hidden bg-white">
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
             <div>
-              <p className="font-semibold text-gray-900">
+              <p className="font-semibold text-slate-900">
                 {selectedStudent.name ?? '-'}
-                <span className="ml-2 text-sm font-normal text-gray-500">{selectedStudent.student_number}</span>
+                <span className="ml-2 text-sm font-normal text-slate-500">{selectedStudent.student_number}</span>
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">답안 클릭 후 수정, 포커스 이탈 시 자동 저장</p>
+              <p className="text-xs text-slate-400 mt-0.5">답안 클릭 후 수정, 포커스 이탈 시 자동 저장</p>
             </div>
-            <button onClick={() => setSelectedStudent(null)} className="text-gray-400 hover:text-gray-600">
+            <button onClick={() => setSelectedStudent(null)} className="text-slate-400 hover:text-slate-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -126,6 +127,7 @@ function StudentRow({
     `students/${student.id}/answers`,
     () => studentsApi.getAnswers(student.id)
   )
+  const toast = useToast()
   const [editing, setEditing] = useState(false)
   const [vals, setVals] = useState({ student_number: student.student_number || '', name: student.name || '' })
   const [saving, setSaving] = useState(false)
@@ -143,7 +145,7 @@ function StudentRow({
       onUpdated()
       setEditing(false)
     } catch (e) {
-      alert(e instanceof Error ? e.message : '저장 실패')
+      toast(e instanceof Error ? e.message : '저장 실패', 'danger')
     } finally {
       setSaving(false)
     }
@@ -152,20 +154,20 @@ function StudentRow({
   return (
     <tr
       className={`cursor-pointer transition-colors ${
-        isSelected ? 'bg-blue-50' : student.needs_review ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'
+        isSelected ? 'bg-indigo-50' : student.needs_review ? 'bg-amber-50/50 hover:bg-amber-100/50' : 'hover:bg-slate-50'
       }`}
       onClick={() => !editing && onSelect()}
     >
       <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
         {editing ? (
           <input
-            className="border border-gray-300 rounded px-2 py-1 w-full text-sm"
+            className="border border-slate-200 rounded-lg px-2 py-1 w-full text-sm"
             value={vals.student_number}
             onChange={(e) => setVals((p) => ({ ...p, student_number: e.target.value }))}
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <span className={student.needs_review ? 'text-yellow-700 font-medium' : ''}>
+          <span className={student.needs_review ? 'text-amber-700 font-medium' : ''}>
             {student.student_number ?? '-'}
           </span>
         )}
@@ -174,33 +176,35 @@ function StudentRow({
         {editing ? (
           <div className="flex items-center gap-1">
             <input
-              className="border border-gray-300 rounded px-2 py-1 w-full text-sm"
+              className="border border-slate-200 rounded-lg px-2 py-1 w-full text-sm"
               value={vals.name}
               onChange={(e) => setVals((p) => ({ ...p, name: e.target.value }))}
             />
-            <button onClick={save} disabled={saving} className="text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap">저장</button>
-            <button onClick={() => setEditing(false)} className="text-xs text-gray-400 hover:text-gray-600">취소</button>
+            <Button size="sm" onClick={save} loading={saving}>저장</Button>
+            <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>취소</Button>
           </div>
         ) : (
           <div className="flex items-center gap-1">
-            <span className={student.needs_review ? 'text-yellow-700 font-medium' : ''}>
+            <span className={student.needs_review ? 'text-amber-700 font-medium' : ''}>
               {student.name ?? '-'}
             </span>
             {student.needs_review && (
-              <span className="bg-yellow-100 text-yellow-700 text-xs px-1.5 py-0.5 rounded-full">검토필요</span>
+              <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">검토필요</span>
             )}
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={(e) => { e.stopPropagation(); setEditing(true) }}
-              className="text-xs text-gray-300 hover:text-blue-500 ml-1"
+              className="ml-1 text-slate-300 hover:text-indigo-500"
             >
               ✎
-            </button>
+            </Button>
           </div>
         )}
       </td>
       {showAnswers && questions.map((q) => (
         <td key={q.id} className="px-4 py-2.5 max-w-[120px]">
-          <span className="text-gray-600 text-xs line-clamp-2">{answerMap[q.id] || '-'}</span>
+          <span className="text-slate-600 text-xs line-clamp-2">{answerMap[q.id] || '-'}</span>
         </td>
       ))}
     </tr>
@@ -212,6 +216,7 @@ function AnswerEditor({ studentId, questions }: { studentId: number; questions: 
     `students/${studentId}/answers`,
     () => studentsApi.getAnswers(studentId)
   )
+  const toast = useToast()
   const [savingId, setSavingId] = useState<number | null>(null)
   const [localTexts, setLocalTexts] = useState<Record<number, string>>({})
 
@@ -224,7 +229,7 @@ function AnswerEditor({ studentId, questions }: { studentId: number; questions: 
       await answersApi.update(answerId, text)
       mutate()
     } catch (e) {
-      alert(e instanceof Error ? e.message : '저장 실패')
+      toast(e instanceof Error ? e.message : '저장 실패', 'danger')
     } finally {
       setSavingId(null)
     }
@@ -233,7 +238,7 @@ function AnswerEditor({ studentId, questions }: { studentId: number; questions: 
   if (!answers) {
     return (
       <div className="flex justify-center py-8">
-        <div className="h-6 w-6 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+        <Spinner size="md" />
       </div>
     )
   }
@@ -243,37 +248,37 @@ function AnswerEditor({ studentId, questions }: { studentId: number; questions: 
       {questions.map((q) => {
         const answer = answerMap[q.id]
         if (!answer) return (
-          <div key={q.id} className="rounded-lg border border-gray-200 p-3">
-            <p className="text-sm font-medium text-gray-700 mb-1">{q.number}번 <span className="text-gray-400 font-normal text-xs">/{q.max_score}점</span></p>
-            <p className="text-xs text-gray-400 italic">답안 없음</p>
-          </div>
+          <Card key={q.id} padding="sm">
+            <p className="text-sm font-medium text-slate-700 mb-1">{q.number}번 <span className="text-slate-400 font-normal text-xs">/{q.max_score}점</span></p>
+            <p className="text-xs text-slate-400 italic">답안 없음</p>
+          </Card>
         )
 
         const currentText = localTexts[answer.id] ?? answer.answer_text
         const isSaving = savingId === answer.id
 
         return (
-          <div key={q.id} className="rounded-lg border border-gray-200 p-3">
+          <Card key={q.id} padding="sm">
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-sm font-medium text-gray-700">
+              <p className="text-sm font-medium text-slate-700">
                 {q.number}번
-                <span className="ml-1 text-gray-400 font-normal text-xs">/{q.max_score}점</span>
+                <span className="ml-1 text-slate-400 font-normal text-xs">/{q.max_score}점</span>
               </p>
               {isSaving && (
-                <span className="text-xs text-blue-500 flex items-center gap-1">
-                  <div className="h-2.5 w-2.5 rounded-full border-2 border-blue-200 border-t-blue-500 animate-spin" />
+                <span className="text-xs text-indigo-500 flex items-center gap-1">
+                  <Spinner size="sm" />
                   저장 중
                 </span>
               )}
             </div>
             <textarea
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none resize-none"
               rows={2}
               value={currentText}
               onChange={(e) => setLocalTexts((p) => ({ ...p, [answer.id]: e.target.value }))}
               onBlur={(e) => handleBlur(answer.id, e.target.value)}
             />
-          </div>
+          </Card>
         )
       })}
     </div>
