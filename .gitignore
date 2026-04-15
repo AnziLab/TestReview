@@ -14,8 +14,10 @@ node_modules/
 .next/
 out/
 
-# Uploads
+# Uploads & Storage (user data)
 backend/uploads/
+backend/storage/
+logs/
 
 # Database
 *.db
