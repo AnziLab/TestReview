@@ -113,6 +113,7 @@ export default function ApiKeySettingsPage() {
           </Card>
 
           <PromptSettings />
+          <UpdateChecker />
         </>
       )}
     </div>
@@ -174,6 +175,111 @@ function PromptSettings() {
       <div className="mt-4">
         <Button onClick={handleSave} loading={saving}>저장</Button>
       </div>
+    </Card>
+  )
+}
+
+interface UpdateInfo {
+  update_available: boolean
+  current_version?: string
+  current_commit?: string
+  latest_version?: string
+  latest_commit?: string
+  latest_date?: string
+  latest_message?: string
+  changelog?: string
+  error?: string
+}
+
+function UpdateChecker() {
+  const toast = useToast()
+  const [checking, setChecking] = useState(false)
+  const [updating, setUpdating] = useState(false)
+  const [info, setInfo] = useState<UpdateInfo | null>(null)
+
+  const { data: versionData } = useSWR('system/version',
+    () => apiFetch<{ version: string; commit: string }>('/system/version')
+  )
+
+  const handleCheck = async () => {
+    setChecking(true)
+    try {
+      const data = await apiFetch<UpdateInfo>('/system/update-check')
+      setInfo(data)
+      if (data.error) toast(`확인 실패: ${data.error}`, 'danger')
+      else if (!data.update_available) toast('최신 버전입니다.', 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '확인 실패', 'danger')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    setUpdating(true)
+    try {
+      const result = await apiFetch<{ success: boolean; message: string; restart_required: boolean }>(
+        '/system/update', { method: 'POST' }
+      )
+      if (result.success) {
+        toast('업데이트 완료! 앱을 재시작해주세요.', 'success')
+        setInfo(null)
+      } else {
+        toast(result.message, 'danger')
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '업데이트 실패', 'danger')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  return (
+    <Card className="mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="font-medium text-slate-800">앱 업데이트</h2>
+          {versionData && (
+            <p className="text-xs text-slate-400 mt-0.5">
+              현재 버전 {versionData.version} ({versionData.commit})
+            </p>
+          )}
+        </div>
+        <Button variant="secondary" size="sm" onClick={handleCheck} loading={checking}>
+          업데이트 확인
+        </Button>
+      </div>
+
+      {info && !info.error && (
+        <div className={`rounded-xl p-4 ${info.update_available ? 'bg-indigo-50 border border-indigo-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+          {info.update_available ? (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-sm font-semibold text-indigo-800">
+                    새 버전 {info.latest_version} 출시 ({info.latest_date})
+                  </p>
+                  <p className="text-xs text-indigo-600 mt-0.5">{info.latest_message}</p>
+                </div>
+                <Button size="sm" onClick={handleUpdate} loading={updating}>
+                  {updating ? '업데이트 중...' : '지금 업데이트'}
+                </Button>
+              </div>
+              {info.changelog && (
+                <details className="mt-2">
+                  <summary className="text-xs text-indigo-600 cursor-pointer hover:underline">변경 내용 보기</summary>
+                  <pre className="text-xs text-slate-600 mt-2 whitespace-pre-wrap font-sans">{info.changelog}</pre>
+                </details>
+              )}
+              <p className="text-xs text-indigo-500 mt-2">
+                ※ 업데이트 후 앱을 재시작해야 반영됩니다. 데이터는 유지됩니다.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-emerald-700 font-medium">✓ 최신 버전입니다.</p>
+          )}
+        </div>
+      )}
     </Card>
   )
 }
