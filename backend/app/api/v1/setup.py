@@ -1,6 +1,6 @@
 """First-run setup endpoint."""
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,9 +20,7 @@ async def setup_status(db: AsyncSession = Depends(get_db)):
 
 class SetupRequest(BaseModel):
     username: str
-    email: EmailStr
     password: str
-    full_name: str
 
 
 @router.post("/setup")
@@ -32,13 +30,16 @@ async def run_setup(body: SetupRequest, db: AsyncSession = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=403, detail="이미 설정이 완료되었습니다.")
 
+    if len(body.password) < 4:
+        raise HTTPException(status_code=400, detail="비밀번호는 4자 이상이어야 합니다.")
+
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     admin = User(
         username=body.username,
-        email=body.email,
+        email=f"{body.username}@local",
         password_hash=hash_password(body.password),
-        full_name=body.full_name,
+        full_name=body.username,
         role="admin",
         status="approved",
         approved_at=now,

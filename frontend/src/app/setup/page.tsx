@@ -8,18 +8,21 @@ import { apiFetch } from '@/lib/api/client'
 
 interface SetupForm {
   username: string
-  email: string
   password: string
-  full_name: string
+  password_confirm: string
 }
 
 export default function SetupPage() {
   const router = useRouter()
   const [done, setDone] = useState(false)
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<SetupForm>()
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<SetupForm>()
+  const password = watch('password')
 
   const onSubmit = async (data: SetupForm) => {
-    await apiFetch('/setup', { method: 'POST', body: JSON.stringify(data) })
+    await apiFetch('/setup', {
+      method: 'POST',
+      body: JSON.stringify({ username: data.username, password: data.password }),
+    })
     setDone(true)
     setTimeout(() => router.replace('/login'), 2000)
   }
@@ -62,26 +65,23 @@ export default function SetupPage() {
               {...register('username', { required: '아이디를 입력하세요.' })}
             />
             <Input
-              label="이름"
-              placeholder="홍길동"
-              error={errors.full_name?.message}
-              {...register('full_name', { required: '이름을 입력하세요.' })}
-            />
-            <Input
-              label="이메일"
-              type="email"
-              placeholder="teacher@school.kr"
-              error={errors.email?.message}
-              {...register('email', { required: '이메일을 입력하세요.' })}
-            />
-            <Input
               label="비밀번호"
               type="password"
-              placeholder="8자 이상"
+              placeholder="4자 이상"
               error={errors.password?.message}
               {...register('password', {
                 required: '비밀번호를 입력하세요.',
-                minLength: { value: 8, message: '8자 이상 입력하세요.' }
+                minLength: { value: 4, message: '4자 이상 입력하세요.' }
+              })}
+            />
+            <Input
+              label="비밀번호 확인"
+              type="password"
+              placeholder="한 번 더 입력"
+              error={errors.password_confirm?.message}
+              {...register('password_confirm', {
+                required: '비밀번호를 한 번 더 입력하세요.',
+                validate: (v) => v === password || '비밀번호가 일치하지 않습니다.',
               })}
             />
             <Button type="submit" loading={isSubmitting} className="w-full" size="lg">
