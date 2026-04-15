@@ -30,5 +30,5 @@ class Answer(Base):
         "Grading", back_populates="answer", cascade="all, delete-orphan", uselist=False
     )
     cluster_members: Mapped[list["ClusterMember"]] = relationship(
-        "ClusterMember", back_populates="answer"
+        "ClusterMember", back_populates="answer", cascade="all, delete-orphan", passive_deletes=True
     )

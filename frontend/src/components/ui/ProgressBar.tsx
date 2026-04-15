@@ -11,7 +11,7 @@ export function ProgressBar({ value, max, label, showPercent = true }: {
         </div>
       )}
       <div className="w-full bg-slate-100 rounded-full h-1.5">
-        <div className="bg-indigo-400 h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+        <div className="bg-indigo-400 h-1.5 rounded-full transition-all duration-[1200ms] ease-out" style={{ width: `${pct}%` }} />
       </div>
     </div>
   )

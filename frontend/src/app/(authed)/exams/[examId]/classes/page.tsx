@@ -45,7 +45,7 @@ function ClassCard({
     total_estimated?: number
   }>(
     isProcessing ? `/classes/${cls.id}/ocr-status` : null,
-    2000,
+    500,
     (d) => {
       if (d.ocr_status === 'done' || d.ocr_status === 'failed') {
         onRefresh()
@@ -78,7 +78,13 @@ function ClassCard({
           <ProgressBar
             value={processed}
             max={total ?? undefined}
-            label={total ? `${processed} / ${total}명 처리 중` : 'OCR 준비 중...'}
+            label={
+              total
+                ? processed < total
+                  ? `${processed + 1}번째 학생 처리 중 (${processed}/${total}명 완료)`
+                  : `${total}/${total}명 완료`
+                : 'OCR 준비 중...'
+            }
           />
         </div>
       )}

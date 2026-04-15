@@ -34,11 +34,11 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
         class_obj.students_processed = 0
         await db.commit()
 
+        doc = None
         try:
             import fitz
             doc = fitz.open(class_obj.source_pdf_path)
             total_pages = len(doc)
-            doc.close()
 
             client = get_gemini_client(teacher.gemini_api_key_encrypted)
 
@@ -64,17 +64,18 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
             groups = _group_pages(total_pages, class_obj.scan_mode)
 
             for page_indices in groups:
-                # 학생 1명 OCR
                 try:
                     data = await _call_gemini_for_student(
-                        client, class_obj.source_pdf_path, page_indices, question_numbers
+                        client, doc, page_indices, question_numbers
                     )
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"OCR primary call failed for pages {page_indices}: {e}")
                     try:
                         data = await _call_gemini_for_student(
-                            client, class_obj.source_pdf_path, page_indices[:1], question_numbers
+                            client, doc, page_indices[:1], question_numbers
                         )
-                    except Exception:
+                    except Exception as e2:
+                        logger.warning(f"OCR fallback call failed for pages {page_indices[:1]}: {e2}")
                         data = {"student_number": None, "name": None, "answers": []}
 
                 confidence = _assess_confidence(data)
@@ -124,3 +125,9 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
                     await db.commit()
             except Exception:
                 pass
+        finally:
+            if doc is not None:
+                try:
+                    doc.close()
+                except Exception:
+                    pass
