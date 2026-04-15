@@ -18,7 +18,7 @@ if %errorlevel% neq 0 (
 set INSTALL_DIR=%~dp0
 cd /d "%INSTALL_DIR%"
 
-:: ── 1. Git ───────────────────────────────────────────────────────────────
+:: -- 1. Git --------------------------------------------------------------
 echo [1/6] Checking Git...
 git --version >nul 2>&1
 if %errorlevel% neq 0 (
@@ -35,7 +35,7 @@ if %errorlevel% neq 0 (
 git --version
 echo      Git OK
 
-:: ── 2. Python ────────────────────────────────────────────────────────────
+:: -- 2. Python ------------------------------------------------------------
 echo [2/6] Checking Python...
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
@@ -53,7 +53,7 @@ if %errorlevel% neq 0 (
 python --version
 echo      Python OK
 
-:: ── 3. Node.js ───────────────────────────────────────────────────────────
+:: -- 3. Node.js ----------------------------------------------------------
 echo.
 echo [3/6] Checking Node.js...
 node --version >nul 2>&1
@@ -71,7 +71,7 @@ if %errorlevel% neq 0 (
 node --version
 echo      Node.js OK
 
-:: ── 4. Python venv + packages ────────────────────────────────────────────
+:: -- 4. Python venv + packages --------------------------------------------
 echo.
 echo [4/6] Installing Python packages (this may take a while)...
 cd "%INSTALL_DIR%backend"
@@ -87,13 +87,13 @@ if %errorlevel% neq 0 (
 )
 echo      Python packages OK
 
-:: ── .env ─────────────────────────────────────────────────────────────────
+:: -- .env ----------------------------------------------------------------
 if not exist "%INSTALL_DIR%backend\.env" (
     echo      Generating .env...
     python scripts\gen_env.py .env
 )
 
-:: ── 5. DB migration ──────────────────────────────────────────────────────
+:: -- 5. DB migration ------------------------------------------------------
 echo.
 echo [5/6] Initializing database...
 alembic upgrade head
@@ -104,7 +104,7 @@ if %errorlevel% neq 0 (
 )
 echo      DB OK
 
-:: ── 6. Frontend packages ─────────────────────────────────────────────────
+:: -- 6. Frontend packages ------------------------------------------------
 echo.
 echo [6/6] Installing frontend packages (this may take a while)...
 cd "%INSTALL_DIR%frontend"
@@ -118,7 +118,7 @@ if %errorlevel% neq 0 (
 )
 echo      Frontend OK
 
-:: ── Desktop shortcut ─────────────────────────────────────────────────────
+:: -- Desktop shortcut ----------------------------------------------------
 echo.
 echo Creating desktop shortcut...
 set SHORTCUT_PATH=%USERPROFILE%\Desktop\TestReview.bat
