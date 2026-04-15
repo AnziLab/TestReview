@@ -56,5 +56,8 @@ echo ""
 echo "  종료: Ctrl+C"
 echo "====================================="
 
+# 서버 뜰 때까지 대기 후 브라우저 자동 오픈
+(sleep 6 && open http://localhost:3000) &
+
 trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0" SIGINT SIGTERM
 wait
