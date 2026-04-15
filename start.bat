@@ -1,5 +1,4 @@
 @echo off
-setlocal enabledelayedexpansion
 chcp 65001 >nul
 title 채점기준 정제 도구
 
@@ -13,15 +12,7 @@ call .venv\Scripts\activate.bat
 :: .env 없으면 자동 생성
 if not exist ".env" (
     echo .env 생성 중...
-    for /f %%i in ('python -c "import secrets; print(secrets.token_hex(32))"') do set SECRET_KEY=%%i
-    for /f %%i in ('python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"') do set ENC_KEY=%%i
-    > .env echo DATABASE_URL=sqlite+aiosqlite:///./grading.db
-    >> .env echo SECRET_KEY=!SECRET_KEY!
-    >> .env echo ENCRYPTION_KEY=!ENC_KEY!
-    >> .env echo STORAGE_PATH=./storage
-    >> .env echo ALLOWED_ORIGINS=["http://localhost:3000"]
-    >> .env echo ACCESS_TOKEN_EXPIRE_MINUTES=120
-    >> .env echo REFRESH_TOKEN_EXPIRE_DAYS=14
+    python scripts\gen_env.py .env
     alembic upgrade head
 )
 

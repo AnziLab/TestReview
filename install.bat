@@ -93,18 +93,7 @@ echo      Python 패키지 OK
 :: ── .env 파일 자동 생성 ─────────────────────────────────────────────────
 if not exist "%INSTALL_DIR%backend\.env" (
     echo      .env 파일 생성 중...
-    :: Python으로 랜덤 키 생성
-    for /f %%i in ('python -c "import secrets; print(secrets.token_hex(32))"') do set SECRET_KEY=%%i
-    for /f %%i in ('python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"') do set ENC_KEY=%%i
-    (
-        echo DATABASE_URL=sqlite+aiosqlite:///./grading.db
-        echo SECRET_KEY=%SECRET_KEY%
-        echo ENCRYPTION_KEY=%ENC_KEY%
-        echo STORAGE_PATH=./storage
-        echo ALLOWED_ORIGINS=["http://localhost:3000"]
-        echo ACCESS_TOKEN_EXPIRE_MINUTES=120
-        echo REFRESH_TOKEN_EXPIRE_DAYS=14
-    ) > "%INSTALL_DIR%backend\.env"
+    python scripts\gen_env.py .env
 )
 
 :: ── 4. DB 마이그레이션 ───────────────────────────────────────────────────
