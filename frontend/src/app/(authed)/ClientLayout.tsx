@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import { TopBar } from '@/components/TopBar'
 import { ApiKeyBanner } from '@/components/ApiKeyBanner'
+import { ToastProvider } from '@/components/ui/useToast'
+import { ConfirmProvider } from '@/components/ui/useConfirm'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -19,17 +21,21 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   if (loading || !user || user.status !== 'approved') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="h-8 w-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="h-8 w-8 rounded-full border-2 border-indigo-100 border-t-indigo-500 animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      <TopBar />
-      <ApiKeyBanner />
-      <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
-    </div>
+    <ConfirmProvider>
+      <ToastProvider>
+        <div className="h-screen flex flex-col overflow-hidden">
+          <TopBar />
+          <ApiKeyBanner />
+          <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
+        </div>
+      </ToastProvider>
+    </ConfirmProvider>
   )
 }

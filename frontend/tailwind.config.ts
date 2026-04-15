@@ -22,6 +22,16 @@ const config: Config = {
           900: '#1e3a8a',
         },
       },
+      borderRadius: {
+        DEFAULT: '10px',
+        sm: '6px',
+        lg: '14px',
+        xl: '18px',
+      },
+      boxShadow: {
+        card: '0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04)',
+        modal: '0 20px 60px -12px rgb(15 23 42 / 0.18)',
+      },
     },
   },
   plugins: [],
