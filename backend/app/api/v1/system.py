@@ -14,7 +14,7 @@ from app.models.user import User
 
 router = APIRouter(tags=["system"])
 
-REPO = "anzi/testreview"  # GitHub 저장소 경로 (owner/repo)
+REPO = "AnziLab/TestReview"  # GitHub 저장소 경로 (owner/repo)
 ROOT_DIR = Path(__file__).resolve().parents[4]  # 프로젝트 루트
 VERSION_FILE = ROOT_DIR / "version.json"
 
