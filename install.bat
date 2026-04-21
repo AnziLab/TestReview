@@ -1,8 +1,9 @@
 @echo off
+chcp 65001 >nul 2>&1
 title TestReview - Install
 
 echo =============================================
-echo   TestReview Installer
+echo   TestReview - Install
 echo =============================================
 echo.
 
@@ -15,8 +16,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-set INSTALL_DIR=%~dp0
-cd /d "%INSTALL_DIR%"
+set REPO_URL=https://github.com/anzilab/testreview.git
+set BRANCH=main
+set INSTALL_DIR=%USERPROFILE%\TestReview
 
 :: -- 1. Git --------------------------------------------------------------
 echo [1/6] Checking Git...
@@ -71,10 +73,36 @@ if %errorlevel% neq 0 (
 node --version
 echo      Node.js OK
 
-:: -- 4. Python venv + packages --------------------------------------------
+:: -- 4. Clone repository (Git) -------------------------------------------
 echo.
-echo [4/6] Installing Python packages (this may take a while)...
-cd "%INSTALL_DIR%backend"
+echo [4/6] Downloading TestReview...
+if exist "%INSTALL_DIR%\.git" (
+    echo      Already installed. Updating to latest version...
+    cd /d "%INSTALL_DIR%"
+    git pull --ff-only origin %BRANCH%
+    if %errorlevel% neq 0 (
+        echo      [!] Update failed - continuing with existing version
+    ) else (
+        echo      Updated OK
+    )
+) else (
+    if exist "%INSTALL_DIR%" (
+        echo      Backing up existing folder...
+        ren "%INSTALL_DIR%" "TestReview.backup.%date:~0,4%%date:~5,2%%date:~8,2%"
+    )
+    git clone -b %BRANCH% %REPO_URL% "%INSTALL_DIR%"
+    if %errorlevel% neq 0 (
+        echo [!] Download failed. Check your internet connection.
+        pause
+        exit /b 1
+    )
+    echo      Download OK
+)
+
+:: -- 5. Python venv + packages --------------------------------------------
+echo.
+echo [5/6] Installing Python packages (this may take a while)...
+cd /d "%INSTALL_DIR%\backend"
 if not exist ".venv" (
     python -m venv .venv
 )
@@ -88,12 +116,12 @@ if %errorlevel% neq 0 (
 echo      Python packages OK
 
 :: -- .env ----------------------------------------------------------------
-if not exist "%INSTALL_DIR%backend\.env" (
+if not exist "%INSTALL_DIR%\backend\.env" (
     echo      Generating .env...
     python scripts\gen_env.py .env
 )
 
-:: -- 5. DB migration ------------------------------------------------------
+:: -- DB migration ---------------------------------------------------------
 echo.
 echo [5/6] Initializing database...
 alembic upgrade head
@@ -107,7 +135,7 @@ echo      DB OK
 :: -- 6. Frontend packages ------------------------------------------------
 echo.
 echo [6/6] Installing frontend packages (this may take a while)...
-cd "%INSTALL_DIR%frontend"
+cd /d "%INSTALL_DIR%\frontend"
 if not exist "node_modules" (
     call npm install --silent
 )
@@ -126,18 +154,19 @@ set SHORTCUT_PATH=%USERPROFILE%\Desktop\TestReview.bat
 (
 echo @echo off
 echo cd /d "%INSTALL_DIR%"
-echo start.bat
+echo call start.bat
 ) > "%SHORTCUT_PATH%"
 
 echo.
 echo =============================================
 echo   Install complete!
 echo.
+echo   Location: %INSTALL_DIR%
+echo.
 echo   Double-click "TestReview" on your desktop
 echo   to launch the app.
 echo.
-echo   On first run your browser will open the
-echo   admin account setup page.
+echo   Updates will be automatic on each launch!
 echo =============================================
 echo.
 pause

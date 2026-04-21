@@ -1,7 +1,32 @@
 @echo off
+setlocal enabledelayedexpansion
 title TestReview
 
 set INSTALL_DIR=%~dp0
+
+:: Auto-update if git repo
+if exist "%INSTALL_DIR%.git" (
+    echo Checking for updates...
+    git -C "%INSTALL_DIR%" fetch origin --quiet >nul 2>&1
+    if %errorlevel% equ 0 (
+        for /f %%a in ('git -C "%INSTALL_DIR%" rev-parse HEAD') do set LOCAL=%%a
+        for /f %%b in ('git -C "%INSTALL_DIR%" rev-parse @{u}') do set REMOTE=%%b
+        if not "!LOCAL!"=="!REMOTE!" (
+            echo   New version found. Updating...
+            git -C "%INSTALL_DIR%" pull --ff-only origin >nul 2>&1
+            if %errorlevel% equ 0 (
+                echo   Updated OK
+            ) else (
+                echo   [!] Auto-update failed
+            )
+        ) else (
+            echo   Up to date
+        )
+    ) else (
+        echo   No internet - running current version
+    )
+    echo.
+)
 
 echo Starting servers...
 cd /d "%INSTALL_DIR%backend"

@@ -11,6 +11,26 @@ echo "  TestReview 채점기준 정제 도구"
 echo "====================================="
 echo ""
 
+# 0. 자동 업데이트
+if [ -d "$SCRIPT_DIR/.git" ]; then
+    echo "[업데이트 확인 중...]"
+    if git -C "$SCRIPT_DIR" fetch origin --quiet 2>/dev/null; then
+        LOCAL=$(git -C "$SCRIPT_DIR" rev-parse HEAD)
+        REMOTE=$(git -C "$SCRIPT_DIR" rev-parse @{u} 2>/dev/null || echo "$LOCAL")
+        if [ "$LOCAL" != "$REMOTE" ]; then
+            echo "  새 버전이 있습니다. 업데이트 중..."
+            git -C "$SCRIPT_DIR" pull --ff-only origin 2>/dev/null \
+                && echo "  ✓ 업데이트 완료" \
+                || echo "  ⚠ 자동 업데이트 실패 — 수동으로 git pull 해주세요"
+        else
+            echo "  ✓ 최신 버전입니다"
+        fi
+    else
+        echo "  ⚠ 인터넷 연결 없음 — 기존 버전으로 실행합니다"
+    fi
+    echo ""
+fi
+
 # 1. 백엔드 의존성
 echo "[1/4] 백엔드 의존성 확인..."
 cd "$BACKEND_DIR"
