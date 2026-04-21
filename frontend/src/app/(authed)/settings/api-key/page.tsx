@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { meApi } from '@/lib/api/exams'
 import { useAuth } from '@/lib/context/AuthContext'
 import { apiFetch } from '@/lib/api/client'
-import { Button, Card, Input, Spinner, Textarea, useConfirm, useToast } from '@/components/ui'
+import { Button, Card, Input, Modal, Spinner, Textarea, useConfirm, useToast } from '@/components/ui'
 
 interface FormData {
   api_key: string
@@ -69,9 +69,18 @@ export default function ApiKeySettingsPage() {
     }
   }
 
+  const [showGuide, setShowGuide] = useState(false)
+
   return (
     <div className="p-6 max-w-2xl mx-auto w-full">
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Gemini API 키 설정</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">Gemini API 키 설정</h1>
+        <Button variant="secondary" size="sm" onClick={() => setShowGuide(true)}>
+          API 키 발급 안내
+        </Button>
+      </div>
+
+      <ApiKeyGuideModal open={showGuide} onClose={() => setShowGuide(false)} />
 
       {isLoading ? (
         <div className="flex justify-center py-8">
@@ -281,5 +290,38 @@ function UpdateChecker() {
         </div>
       )}
     </Card>
+  )
+}
+
+function ApiKeyGuideModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Gemini API 키 발급 방법" footer={
+      <Button variant="secondary" onClick={onClose}>닫기</Button>
+    }>
+      <ol className="space-y-4 text-sm text-slate-700">
+        <li className="flex gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">1</span>
+          <div>
+            <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer"
+              className="text-indigo-600 font-medium hover:underline">Google AI Studio</a>에 접속하여 Google 계정으로 로그인합니다.
+          </div>
+        </li>
+        <li className="flex gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">2</span>
+          <div>왼쪽 메뉴에서 <strong>Get API Key</strong>를 클릭합니다.</div>
+        </li>
+        <li className="flex gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">3</span>
+          <div><strong>Create API key</strong> 버튼을 클릭하고, 프로젝트를 선택한 뒤 키를 생성합니다.</div>
+        </li>
+        <li className="flex gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">4</span>
+          <div>생성된 키(<code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">AIzaSy...</code>)를 복사하여 이 페이지에 붙여넣으세요.</div>
+        </li>
+      </ol>
+      <div className="mt-4 p-3 bg-emerald-50 rounded-xl">
+        <p className="text-xs text-emerald-700">무료 티어로 충분히 사용 가능합니다. API 키는 본인 컴퓨터에만 암호화되어 저장됩니다.</p>
+      </div>
+    </Modal>
   )
 }
