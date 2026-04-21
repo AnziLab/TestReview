@@ -29,6 +29,26 @@ if exist "%INSTALL_DIR%.git" (
     echo.
 )
 
+:: Update desktop shortcut icon if needed
+set ICON_PATH=%INSTALL_DIR%assets\icon.ico
+set LNK_PATH=
+for /f "delims=" %%d in ('powershell -noprofile -c "[Environment]::GetFolderPath('Desktop')"') do set LNK_PATH=%%d\TestReview.lnk
+if exist "%ICON_PATH%" if not exist "%LNK_PATH%" (
+    set SHORTCUT_VBS=%TEMP%\update_shortcut.vbs
+    (
+        echo Set WshShell = WScript.CreateObject("WScript.Shell"^)
+        echo Set lnk = WshShell.CreateShortcut(WshShell.SpecialFolders("Desktop"^) ^& "\TestReview.lnk"^)
+        echo lnk.TargetPath = "%INSTALL_DIR%start.bat"
+        echo lnk.WorkingDirectory = "%INSTALL_DIR%"
+        echo lnk.IconLocation = "%ICON_PATH%"
+        echo lnk.Description = "TestReview - Grading Tool"
+        echo lnk.Save
+    ) > "!SHORTCUT_VBS!"
+    cscript //nologo "!SHORTCUT_VBS!" >nul 2>&1
+    del "!SHORTCUT_VBS!"
+    if exist "%USERPROFILE%\Desktop\TestReview.bat" del "%USERPROFILE%\Desktop\TestReview.bat"
+)
+
 :: Kill existing processes on port 8000 and 3000
 echo Stopping previous servers if running...
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8000 " ^| findstr LISTENING') do (
