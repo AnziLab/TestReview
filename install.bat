@@ -150,16 +150,26 @@ if %errorlevel% neq 0 (
 )
 echo      Frontend OK
 
-:: -- Desktop shortcut ----------------------------------------------------
+:: -- Desktop shortcut (with icon) -----------------------------------------
 echo.
 echo Creating desktop shortcut...
-set SHORTCUT_PATH=%USERPROFILE%\Desktop\TestReview.bat
+set SHORTCUT_VBS=%TEMP%\create_shortcut.vbs
+set ICON_PATH=%INSTALL_DIR%\assets\icon.ico
 
 (
-echo @echo off
-echo cd /d "%INSTALL_DIR%"
-echo call start.bat
-) > "%SHORTCUT_PATH%"
+echo Set WshShell = WScript.CreateObject("WScript.Shell"^)
+echo Set lnk = WshShell.CreateShortcut(WshShell.SpecialFolders("Desktop"^) ^& "\TestReview.lnk"^)
+echo lnk.TargetPath = "%INSTALL_DIR%\start.bat"
+echo lnk.WorkingDirectory = "%INSTALL_DIR%"
+echo lnk.IconLocation = "%ICON_PATH%"
+echo lnk.Description = "TestReview - Grading Tool"
+echo lnk.Save
+) > "%SHORTCUT_VBS%"
+cscript //nologo "%SHORTCUT_VBS%"
+del "%SHORTCUT_VBS%"
+
+:: Remove old .bat shortcut if exists
+if exist "%USERPROFILE%\Desktop\TestReview.bat" del "%USERPROFILE%\Desktop\TestReview.bat"
 
 echo.
 echo =============================================
