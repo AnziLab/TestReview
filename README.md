@@ -36,23 +36,24 @@
 
 > 자세한 설치 가이드는 **[INSTALL.md](INSTALL.md)** 를 참고하세요.
 
-### Windows
-
-```
-1. 이 저장소를 ZIP으로 다운로드 → 압축 해제
-2. install.bat → 우클릭 → 관리자로 실행
-3. 바탕화면 "채점기준 정제 도구" 더블클릭
-```
-
 ### Mac
 
 ```
-1. 이 저장소를 ZIP으로 다운로드 → 압축 해제
-2. 터미널에서: bash install.sh
-3. start.command 더블클릭
+1. install.command 파일을 다운로드
+2. 더블클릭 → 자동으로 Git/Python/Node.js 설치 + 앱 다운로드
+3. 설치 완료 후 ~/TestReview/start.command 더블클릭
+```
+
+### Windows
+
+```
+1. install.bat 파일을 다운로드
+2. 우클릭 → 관리자로 실행 → 자동으로 Git/Python/Node.js 설치 + 앱 다운로드
+3. 바탕화면 "TestReview" 더블클릭
 ```
 
 > Git, Python, Node.js가 없어도 설치 스크립트가 자동으로 설치합니다.
+> Git으로 설치되므로 앱 실행 시 자동으로 최신 버전으로 업데이트됩니다.
 
 ---
 
@@ -103,7 +104,8 @@
 
 ## 🔄 업데이트
 
-앱 내 **설정 → 업데이트 확인** 버튼으로 최신 버전 확인 및 자동 업데이트 가능.
+- **자동**: 앱 실행(start.command / start.bat) 시 자동으로 최신 버전 확인 및 업데이트
+- **수동**: 앱 내 **설정 → 업데이트 확인** 버튼
 
 ---
 
