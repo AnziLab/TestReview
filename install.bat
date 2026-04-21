@@ -99,6 +99,10 @@ if exist "%INSTALL_DIR%\.git" (
     echo      Download OK
 )
 
+:: Mark as safe directory (install runs as admin, app runs as normal user)
+git config --global --add safe.directory "%INSTALL_DIR%"
+echo      Git safe.directory OK
+
 :: -- 5. Python venv + packages --------------------------------------------
 echo.
 echo [5/6] Installing Python packages (this may take a while)...

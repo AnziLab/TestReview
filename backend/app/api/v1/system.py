@@ -26,8 +26,20 @@ def _local_version() -> dict:
         return {"version": "unknown"}
 
 
+def _ensure_safe_directory():
+    """Windows: install runs as admin, app runs as normal user → mark safe."""
+    try:
+        subprocess.run(
+            ["git", "config", "--global", "--add", "safe.directory", str(ROOT_DIR)],
+            capture_output=True, timeout=5,
+        )
+    except Exception:
+        pass
+
+
 def _git_commit() -> str:
     try:
+        _ensure_safe_directory()
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=ROOT_DIR, capture_output=True, text=True, timeout=5
@@ -118,6 +130,9 @@ async def apply_update(current_user: User = Depends(require_admin)):
     def run(cmd, cwd=None):
         r = subprocess.run(cmd, cwd=cwd or ROOT_DIR, capture_output=True, text=True, timeout=120)
         return {"cmd": " ".join(cmd), "ok": r.returncode == 0, "out": r.stdout.strip(), "err": r.stderr.strip()}
+
+    # 0. Mark safe directory (Windows: install runs as admin, app as normal user)
+    run(["git", "config", "--global", "--add", "safe.directory", str(ROOT_DIR)])
 
     # 1. git pull
     results.append(run(["git", "pull", "origin", "HEAD"]))

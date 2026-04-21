@@ -6,6 +6,7 @@ set INSTALL_DIR=%~dp0
 
 :: Auto-update if git repo
 if exist "%INSTALL_DIR%.git" (
+    git config --global --add safe.directory "%INSTALL_DIR%" >nul 2>&1
     echo Checking for updates...
     git -C "%INSTALL_DIR%" fetch origin --quiet >nul 2>&1
     if %errorlevel% equ 0 (
