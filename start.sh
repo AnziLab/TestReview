@@ -31,6 +31,12 @@ if [ -d "$SCRIPT_DIR/.git" ]; then
     echo ""
 fi
 
+# 0.5. 기존 서버 정리
+echo "[기존 서버 정리 중...]"
+lsof -ti:8000 | xargs kill -9 2>/dev/null && echo "  ✓ 포트 8000 정리" || true
+lsof -ti:3000 | xargs kill -9 2>/dev/null && echo "  ✓ 포트 3000 정리" || true
+echo ""
+
 # 1. 백엔드 의존성
 echo "[1/4] 백엔드 의존성 확인..."
 cd "$BACKEND_DIR"

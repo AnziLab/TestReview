@@ -28,6 +28,15 @@ if exist "%INSTALL_DIR%.git" (
     echo.
 )
 
+:: Kill existing processes on port 8000 and 3000
+echo Stopping previous servers if running...
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8000 " ^| findstr LISTENING') do (
+    taskkill /PID %%p /F >nul 2>&1
+)
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":3000 " ^| findstr LISTENING') do (
+    taskkill /PID %%p /F >nul 2>&1
+)
+
 echo Starting servers...
 cd /d "%INSTALL_DIR%backend"
 call .venv\Scripts\activate.bat
