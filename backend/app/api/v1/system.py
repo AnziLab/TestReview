@@ -72,19 +72,23 @@ async def check_update(current_user: User = Depends(get_current_user)):
                 headers={"Accept": "application/vnd.github.v3+json"},
             )
             changelog = ""
-            latest_version = local["version"]
+            latest_version = None
             if rr.status_code == 200:
                 rel = rr.json()
                 changelog = rel.get("body", "")
-                latest_version = rel.get("tag_name", local["version"]).lstrip("v")
+                latest_version = rel.get("tag_name", "").lstrip("v") or None
 
         update_available = local_commit != latest_sha
 
+        # 릴리즈 태그가 없으면 커밋 해시를 버전으로 표시
+        current_display = local.get("version", "unknown")
+        latest_display = latest_version or latest_date
+
         return {
             "update_available": update_available,
-            "current_version": local.get("version"),
+            "current_version": f"{current_display} ({local_commit})",
             "current_commit": local_commit,
-            "latest_version": latest_version,
+            "latest_version": f"{latest_display} ({latest_sha})" if update_available else current_display,
             "latest_commit": latest_sha,
             "latest_date": latest_date,
             "latest_message": latest_msg,
