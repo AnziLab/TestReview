@@ -153,20 +153,7 @@ echo      Frontend OK
 :: -- Desktop shortcut (with icon) -----------------------------------------
 echo.
 echo Creating desktop shortcut...
-set SHORTCUT_VBS=%TEMP%\create_shortcut.vbs
-set ICON_PATH=%INSTALL_DIR%\assets\icon.ico
-
-(
-echo Set WshShell = WScript.CreateObject("WScript.Shell"^)
-echo Set lnk = WshShell.CreateShortcut(WshShell.SpecialFolders("Desktop"^) ^& "\TestReview.lnk"^)
-echo lnk.TargetPath = "%INSTALL_DIR%\start.bat"
-echo lnk.WorkingDirectory = "%INSTALL_DIR%"
-echo lnk.IconLocation = "%ICON_PATH%"
-echo lnk.Description = "TestReview - Grading Tool"
-echo lnk.Save
-) > "%SHORTCUT_VBS%"
-cscript //nologo "%SHORTCUT_VBS%"
-del "%SHORTCUT_VBS%"
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $lnk = $ws.CreateShortcut([IO.Path]::Combine($ws.SpecialFolders('Desktop'), 'TestReview.lnk')); $lnk.TargetPath = '%INSTALL_DIR%\start.bat'; $lnk.WorkingDirectory = '%INSTALL_DIR%'; $lnk.IconLocation = '%INSTALL_DIR%\assets\icon.ico'; $lnk.Description = 'TestReview'; $lnk.Save()"
 
 :: Remove old .bat shortcut if exists
 if exist "%USERPROFILE%\Desktop\TestReview.bat" del "%USERPROFILE%\Desktop\TestReview.bat"

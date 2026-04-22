@@ -34,18 +34,7 @@ set ICON_PATH=%INSTALL_DIR%assets\icon.ico
 set LNK_PATH=
 for /f "delims=" %%d in ('powershell -noprofile -c "[Environment]::GetFolderPath('Desktop')"') do set LNK_PATH=%%d\TestReview.lnk
 if exist "%ICON_PATH%" if not exist "%LNK_PATH%" (
-    set SHORTCUT_VBS=%TEMP%\update_shortcut.vbs
-    (
-        echo Set WshShell = WScript.CreateObject("WScript.Shell"^)
-        echo Set lnk = WshShell.CreateShortcut(WshShell.SpecialFolders("Desktop"^) ^& "\TestReview.lnk"^)
-        echo lnk.TargetPath = "%INSTALL_DIR%start.bat"
-        echo lnk.WorkingDirectory = "%INSTALL_DIR%"
-        echo lnk.IconLocation = "%ICON_PATH%"
-        echo lnk.Description = "TestReview - Grading Tool"
-        echo lnk.Save
-    ) > "!SHORTCUT_VBS!"
-    cscript //nologo "!SHORTCUT_VBS!" >nul 2>&1
-    del "!SHORTCUT_VBS!"
+    powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $lnk = $ws.CreateShortcut([IO.Path]::Combine($ws.SpecialFolders('Desktop'), 'TestReview.lnk')); $lnk.TargetPath = '%INSTALL_DIR%start.bat'; $lnk.WorkingDirectory = '%INSTALL_DIR%'; $lnk.IconLocation = '%ICON_PATH%'; $lnk.Description = 'TestReview'; $lnk.Save()" >nul 2>&1
     if exist "%USERPROFILE%\Desktop\TestReview.bat" del "%USERPROFILE%\Desktop\TestReview.bat"
 )
 
