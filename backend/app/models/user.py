@@ -25,6 +25,12 @@ class User(Base):
     gemini_api_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     grading_extra_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     clustering_extra_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ocr_prompt_override: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    grading_prompt_override: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    clustering_prompt_override: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rubric_extract_prompt_override: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rubric_generate_prompt_override: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    exam_paper_extract_prompt_override: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), server_default=func.now(), nullable=False
     )

@@ -55,6 +55,7 @@ async def run_refinement(session_id: int, question_id: int, teacher_id: int) -> 
                 max_score=float(question.max_score),
                 question_text=question.question_text,
                 extra_instructions=teacher.clustering_extra_instructions,
+                prompt_override=teacher.clustering_prompt_override,
             )
 
             # Build answer id → Answer map

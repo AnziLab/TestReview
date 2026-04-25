@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_current_user, get_db
 from app.gemini.client import ping_gemini
+from app.gemini.prompts import PROMPTS, validate_template
 from app.models.user import User
 from app.schemas.auth import PasswordChangeRequest, UserOut
 from app.security import decrypt_api_key, encrypt_api_key, hash_password, mask_api_key, verify_password
@@ -90,3 +91,67 @@ async def update_profile(
     await db.commit()
     await db.refresh(current_user)
     return current_user
+
+
+# ───────────────── 프롬프트 오버라이드 ─────────────────
+
+
+class PromptUpdate(BaseModel):
+    template: str
+
+
+@router.get("/prompts")
+async def list_prompts(current_user: User = Depends(get_current_user)):
+    """6개 프롬프트의 메타정보 + 사용자별 현재 오버라이드 반환."""
+    return {
+        "prompts": [
+            {
+                "key": pdef.key,
+                "label": pdef.label,
+                "description": pdef.description,
+                "default": pdef.default,
+                "current": getattr(current_user, pdef.override_field, None),
+                "placeholders": list(pdef.placeholders),
+            }
+            for pdef in PROMPTS.values()
+        ]
+    }
+
+
+@router.put("/prompts/{key}")
+async def set_prompt_override(
+    key: str,
+    body: PromptUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """프롬프트 오버라이드 저장. 검증 실패 시 400."""
+    pdef = PROMPTS.get(key)
+    if not pdef:
+        raise HTTPException(status_code=404, detail=f"Unknown prompt key: {key}")
+
+    error = validate_template(key, body.template)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
+    setattr(current_user, pdef.override_field, body.template)
+    db.add(current_user)
+    await db.commit()
+    return {"success": True}
+
+
+@router.delete("/prompts/{key}")
+async def clear_prompt_override(
+    key: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """오버라이드 삭제 → 기본 프롬프트 사용으로 복원."""
+    pdef = PROMPTS.get(key)
+    if not pdef:
+        raise HTTPException(status_code=404, detail=f"Unknown prompt key: {key}")
+
+    setattr(current_user, pdef.override_field, None)
+    db.add(current_user)
+    await db.commit()
+    return {"success": True}

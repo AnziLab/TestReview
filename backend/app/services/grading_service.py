@@ -16,7 +16,11 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 
 
-async def _grade_question(db, client, question, extra_instructions: str | None = None) -> None:
+async def _grade_question(
+    db, client, question,
+    extra_instructions: str | None = None,
+    prompt_override: str | None = None,
+) -> None:
     """문항 1개 채점 (upsert). 공통 로직."""
     from app.gemini.grading import grade_answers
 
@@ -33,6 +37,7 @@ async def _grade_question(db, client, question, extra_instructions: str | None =
         max_score=float(question.max_score),
         question_text=question.question_text,
         extra_instructions=extra_instructions,
+        prompt_override=prompt_override,
     )
 
     answer_ids = [r.get("answer_id") for r in grading_results if r.get("answer_id")]
@@ -79,7 +84,11 @@ async def run_grading_question(question_id: int, teacher_id: int) -> None:
             return
         try:
             client = get_gemini_client(teacher.gemini_api_key_encrypted)
-            await _grade_question(db, client, question)
+            await _grade_question(
+                db, client, question,
+                extra_instructions=teacher.grading_extra_instructions,
+                prompt_override=teacher.grading_prompt_override,
+            )
             await db.commit()
             logger.info(f"Re-grading done for question {question_id}")
         except Exception as exc:
@@ -108,7 +117,11 @@ async def run_grading(exam_id: int, teacher_id: int) -> None:
 
             for question in questions:
                 try:
-                    await _grade_question(db, client, question, teacher.grading_extra_instructions)
+                    await _grade_question(
+                        db, client, question,
+                        extra_instructions=teacher.grading_extra_instructions,
+                        prompt_override=teacher.grading_prompt_override,
+                    )
                 except Exception as exc:
                     logger.warning(f"Grading failed for question {question.id}: {exc}")
                     continue

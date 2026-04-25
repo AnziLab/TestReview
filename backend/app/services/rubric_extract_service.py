@@ -35,7 +35,10 @@ async def run_rubric_extraction(exam_id: int, file_path: str, teacher_id: int) -
                 return
 
             client = get_gemini_client(teacher.gemini_api_key_encrypted)
-            data = await extract_rubric_from_file(client, file_path)
+            data = await extract_rubric_from_file(
+                client, file_path,
+                prompt_override=teacher.rubric_extract_prompt_override,
+            )
 
             # Remove old questions for this exam
             existing = await db.execute(select(Question).where(Question.exam_id == exam_id))

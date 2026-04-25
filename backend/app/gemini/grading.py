@@ -5,42 +5,7 @@ import json
 from google import genai
 from google.genai import types
 
-GRADING_PROMPT_TEMPLATE = """아래는 한 문항의 정보와 채점할 학생 답안 목록입니다.
-
-{question_text_section}## 모범답안
-{model_answer}
-
-## 채점기준 (배점: {max_score}점)
-{rubric_json}
-
-## 학생 답안 목록
-{answers_json}
-
-각 답안을 채점해줘.
-
-채점 원칙:
-1. **내용 정확성 우선**: 문법이 맞아도 내용이 틀리면 오답. 모범답안의 의미/조건을 충족해야 정답.
-2. 모범답안과 내용상 동등한 표현은 정답으로 인정.
-3. 채점기준에 감점 조건이 있으면 그에 따라 감점.
-4. 빈칸, "모르겠다", "모름" 등 무응답은 0점.
-{extra_section}
-출력 형식:
-{{
-  "results": [
-    {{
-      "answer_id": 1,
-      "score": 2.0,
-      "matched_criteria_ids": ["criteria_0"],
-      "rationale": "채점 근거 (내용 정확성과 감점 이유 명시)"
-    }}
-  ]
-}}
-
-주의사항:
-- 모든 답안에 대해 결과를 반환
-- score는 0 이상 {max_score} 이하
-- rationale은 한국어로, 내용이 맞는지 틀린지를 명확히 설명
-"""
+from app.gemini.prompts import GRADING_DEFAULT, render, select_template
 
 
 async def grade_answers(
@@ -51,6 +16,7 @@ async def grade_answers(
     max_score: float = 0,
     question_text: str | None = None,
     extra_instructions: str | None = None,
+    prompt_override: str | None = None,
 ) -> list[dict]:
     """
     Grade a list of answers for a single question.
@@ -79,7 +45,9 @@ async def grade_answers(
     if extra_instructions and extra_instructions.strip():
         extra_section += f"- {extra_instructions.strip()}\n"
 
-    prompt = GRADING_PROMPT_TEMPLATE.format(
+    template = select_template(prompt_override, GRADING_DEFAULT)
+    prompt = render(
+        template, GRADING_DEFAULT,
         question_text_section=qt_section,
         model_answer=model_answer or "(모범답안 없음)",
         max_score=max_score,

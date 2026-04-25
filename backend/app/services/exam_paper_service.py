@@ -36,7 +36,10 @@ async def run_exam_paper_extraction(
             client = get_gemini_client(teacher.gemini_api_key_encrypted)
 
             # {question_number (int): text}
-            extracted = await extract_exam_paper(client, file_path, question_from, question_to)
+            extracted = await extract_exam_paper(
+                client, file_path, question_from, question_to,
+                prompt_override=teacher.exam_paper_extract_prompt_override,
+            )
 
             # Fetch all questions for this exam
             questions = (

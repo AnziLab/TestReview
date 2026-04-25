@@ -41,6 +41,7 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
             total_pages = len(doc)
 
             client = get_gemini_client(teacher.gemini_api_key_encrypted)
+            ocr_prompt_override = teacher.ocr_prompt_override
 
             # 문항 번호 목록 로드
             q_result = await db.execute(
@@ -66,13 +67,13 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
             for page_indices in groups:
                 try:
                     data = await _call_gemini_for_student(
-                        client, doc, page_indices, question_numbers
+                        client, doc, page_indices, question_numbers, ocr_prompt_override
                     )
                 except Exception as e:
                     logger.warning(f"OCR primary call failed for pages {page_indices}: {e}")
                     try:
                         data = await _call_gemini_for_student(
-                            client, doc, page_indices[:1], question_numbers
+                            client, doc, page_indices[:1], question_numbers, ocr_prompt_override
                         )
                     except Exception as e2:
                         logger.warning(f"OCR fallback call failed for pages {page_indices[:1]}: {e2}")

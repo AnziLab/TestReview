@@ -122,10 +122,139 @@ export default function ApiKeySettingsPage() {
           </Card>
 
           <PromptSettings />
+          <PromptOverrideSection />
           <UpdateChecker />
         </>
       )}
     </div>
+  )
+}
+
+interface PromptInfo {
+  key: string
+  label: string
+  description: string
+  default: string
+  current: string | null
+  placeholders: string[]
+}
+
+function PromptOverrideSection() {
+  const { data, mutate, isLoading } = useSWR('me/prompts', () => meApi.listPrompts())
+
+  return (
+    <Card className="mt-4">
+      <h2 className="font-medium text-slate-800 mb-1">프롬프트 전체 커스터마이징 (고급)</h2>
+      <p className="text-xs text-slate-500 mb-4">
+        각 작업의 기본 프롬프트를 통째로 덮어쓸 수 있습니다.
+        텍스트박스를 비우거나 <b>기본값으로 복원</b>을 누르면 원래 프롬프트로 돌아갑니다.
+      </p>
+      {isLoading || !data ? (
+        <div className="flex justify-center py-6"><Spinner size="md" /></div>
+      ) : (
+        <div className="space-y-2">
+          {data.prompts.map((p) => (
+            <PromptOverrideEditor key={p.key} prompt={p} onChanged={() => mutate()} />
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function PromptOverrideEditor({ prompt, onChanged }: { prompt: PromptInfo; onChanged: () => void }) {
+  const toast = useToast()
+  const confirm = useConfirm()
+  const initial = prompt.current ?? prompt.default
+  const [text, setText] = useState(initial)
+  const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  const isOverridden = prompt.current !== null
+  const dirty = text !== initial
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await meApi.setPrompt(prompt.key, text)
+      toast(`"${prompt.label}" 프롬프트 저장됨`, 'success')
+      onChanged()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '저장 실패', 'danger')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleReset = async () => {
+    if (!isOverridden) return
+    const ok = await confirm({
+      title: '기본값으로 복원',
+      description: `"${prompt.label}" 프롬프트의 사용자 설정을 지우고 기본 프롬프트로 되돌립니다.`,
+      confirmLabel: '복원',
+    })
+    if (!ok) return
+    setResetting(true)
+    try {
+      await meApi.clearPrompt(prompt.key)
+      setText(prompt.default)
+      toast('기본 프롬프트로 복원되었습니다.', 'success')
+      onChanged()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '복원 실패', 'danger')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  return (
+    <details className="border border-slate-200 rounded-lg">
+      <summary className="cursor-pointer px-3 py-2 text-sm flex items-center gap-2 select-none hover:bg-slate-50">
+        <svg className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        <span className="font-medium text-slate-800">{prompt.label}</span>
+        {isOverridden && (
+          <span className="ml-auto text-[10px] uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+            사용자 설정
+          </span>
+        )}
+      </summary>
+      <div className="px-3 pb-3 pt-1 space-y-2">
+        <p className="text-xs text-slate-500">{prompt.description}</p>
+        {prompt.placeholders.length > 0 && (
+          <p className="text-xs text-slate-500">
+            사용 가능한 변수:{' '}
+            {prompt.placeholders.map((v) => (
+              <code key={v} className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] mr-1 font-mono">
+                {`{${v}}`}
+              </code>
+            ))}
+          </p>
+        )}
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={12}
+          className="font-mono text-xs leading-relaxed"
+        />
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={handleSave} loading={saving} disabled={!dirty || !text.trim()}>
+            저장
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleReset}
+            loading={resetting}
+            disabled={!isOverridden}
+          >
+            기본값으로 복원
+          </Button>
+          {dirty && <span className="text-xs text-amber-600">변경사항 미저장</span>}
+        </div>
+      </div>
+    </details>
   )
 }
 

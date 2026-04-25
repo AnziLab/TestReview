@@ -38,6 +38,7 @@ async def run_rubric_generation(
                 subject=exam.subject,
                 school_level=exam.school_level,
                 grade=exam.grade,
+                prompt_override=teacher.rubric_generate_prompt_override,
             )
 
             # 기존 문항 삭제 후 새로 저장

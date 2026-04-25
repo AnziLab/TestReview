@@ -138,6 +138,27 @@ export const meApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  listPrompts: () =>
+    apiFetch<{
+      prompts: Array<{
+        key: string
+        label: string
+        description: string
+        default: string
+        current: string | null
+        placeholders: string[]
+      }>
+    }>('/me/prompts'),
+
+  setPrompt: (key: string, template: string) =>
+    apiFetch<{ success: boolean }>(`/me/prompts/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ template }),
+    }),
+
+  clearPrompt: (key: string) =>
+    apiFetch<{ success: boolean }>(`/me/prompts/${key}`, { method: 'DELETE' }),
 }
 
 export const adminApi = {
