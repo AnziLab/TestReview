@@ -1,10 +1,10 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { classesApi, studentsApi, questionsApi, answersApi } from '@/lib/api/exams'
 import type { Student, Answer, Question } from '@/lib/types'
-import { Button, Card, Spinner, useToast } from '@/components/ui'
+import { Button, Card, Spinner, Textarea, useToast } from '@/components/ui'
 
 export default function ClassDetailPage({
   params,
@@ -50,6 +50,15 @@ export default function ClassDetailPage({
           <h1 className="text-lg font-bold text-slate-900">{cls?.name ?? '반 상세'}</h1>
           <p className="text-sm text-slate-500">{students?.length ?? 0}명</p>
         </div>
+
+        {students && students.length > 0 && (
+          <div className="px-4 pt-3 pb-2 border-b border-slate-100 flex-shrink-0">
+            <BulkStudentInfoPaste
+              students={students}
+              onApplied={() => mutateStudents()}
+            />
+          </div>
+        )}
 
         <div className="flex-1 overflow-auto">
           <table className="w-full text-sm">
@@ -282,5 +291,102 @@ function AnswerEditor({ studentId, questions }: { studentId: number; questions: 
         )
       })}
     </div>
+  )
+}
+
+type ParsedRow = { student_number: string; name: string }
+
+function parsePastedRows(raw: string): ParsedRow[] {
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      // 탭 우선, 없으면 공백으로 분리. 첫 토큰=학번, 나머지=이름(공백 보존)
+      const parts = line.includes('\t') ? line.split('\t') : line.split(/\s+/)
+      const [first, ...rest] = parts
+      return {
+        student_number: (first ?? '').trim(),
+        name: rest.join(' ').trim(),
+      }
+    })
+}
+
+function BulkStudentInfoPaste({
+  students,
+  onApplied,
+}: {
+  students: Student[]
+  onApplied: () => void
+}) {
+  const [text, setText] = useState('')
+  const [applying, setApplying] = useState(false)
+  const toast = useToast()
+
+  const parsed = useMemo(() => parsePastedRows(text), [text])
+  const willApply = Math.min(parsed.length, students.length)
+  const overflow = Math.max(0, parsed.length - students.length)
+
+  const apply = async () => {
+    if (parsed.length === 0) return
+    setApplying(true)
+    try {
+      await Promise.all(
+        students.slice(0, parsed.length).map((s, i) =>
+          studentsApi.update(s.id, {
+            student_number: parsed[i].student_number || undefined,
+            name: parsed[i].name || undefined,
+          })
+        )
+      )
+      toast(`${willApply}명 학번/이름 입력 완료`, 'success')
+      setText('')
+      onApplied()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '일괄 입력 실패', 'danger')
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  return (
+    <details className="group">
+      <summary className="cursor-pointer text-sm font-medium text-indigo-600 hover:text-indigo-700 select-none flex items-center gap-1.5">
+        <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        학번/이름 일괄 입력 (엑셀에서 붙여넣기)
+      </summary>
+      <div className="mt-2 space-y-2">
+        <p className="text-xs text-slate-500 leading-relaxed">
+          엑셀에서 <b>학번 열, 이름 열</b> 순서로 두 칸을 복사한 뒤 아래 칸에 붙여넣으세요.
+          위에서부터 순서대로 학생 행에 채워집니다.
+        </p>
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={'예시:\n0101\t안지훈\n0102\t장지훈'}
+          rows={4}
+          className="font-mono text-xs"
+        />
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            {parsed.length === 0 ? (
+              <>붙여넣기를 기다리는 중…</>
+            ) : (
+              <>
+                {willApply}명에게 적용 예정
+                {overflow > 0 && (
+                  <span className="ml-1.5 text-amber-600">(학생 수 초과 {overflow}줄은 무시)</span>
+                )}
+              </>
+            )}
+          </p>
+          <Button size="sm" onClick={apply} loading={applying} disabled={parsed.length === 0}>
+            적용
+          </Button>
+        </div>
+      </div>
+    </details>
   )
 }

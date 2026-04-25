@@ -9,15 +9,13 @@ from google.genai import types
 
 def _build_ocr_prompt(question_numbers: list[str]) -> str:
     q_list = "\n".join(f"- {q}" for q in question_numbers)
-    return f"""이 시험 답안지 이미지에서 학생 정보와 답안을 추출해줘.
+    return f"""이 시험 답안지 이미지에서 학생 답안을 추출해줘.
 
 이 시험의 문항 번호 목록 (정확히 이 번호를 사용할 것):
 {q_list}
 
 출력 형식:
 {{
-  "student_number": "학번",
-  "name": "이름",
   "answers": [
     {{"question_number": "1-1)", "answer_text": "답안"}},
     {{"question_number": "1-2)", "answer_text": "답안"}}
@@ -28,7 +26,8 @@ def _build_ocr_prompt(question_numbers: list[str]) -> str:
 - question_number는 반드시 위 목록에 있는 번호 그대로 사용
 - 답안지의 각 칸을 문항 번호 순서대로 읽어서 매핑
 - 답안이 없거나 빈칸이면 빈 문자열 ""
-- 학번/이름이 없으면 null
+- **취소선이 그어진 글자는 무시할 것**. 학생이 답을 고치며 글자 위에 줄을 그어 지운 경우(한 줄/두 줄/여러 줄 가로선, 사선, 지그재그 포함), 그 글자는 답안에 포함하지 않음. 옆이나 아래에 새로 쓴 답안만 추출.
+- 학생 정보(학번/이름)는 추출하지 않음
 - 손글씨가 불분명해도 최선을 다해 해독
 - 모든 문항을 빠짐없이 포함 (빈칸도 포함)
 - JSON만 반환, 다른 설명 없음"""
@@ -82,20 +81,25 @@ async def _call_gemini_for_student(
         data = json.loads(response.text)
     except json.JSONDecodeError:
         # Fallback: return empty structure
-        data = {"student_number": None, "name": None, "answers": []}
+        data = {"answers": []}
 
     return data
 
 
 def _assess_confidence(data: dict) -> str:
-    """Heuristic OCR confidence: high/medium/low."""
-    if not data.get("answers"):
+    """Heuristic OCR confidence based on answers only.
+
+    high   : 답안이 있고, 빈칸 비율이 절반 미만
+    medium : 답안이 있지만 절반 이상이 빈칸
+    low    : 답안이 하나도 없음
+    """
+    answers = data.get("answers") or []
+    if not answers:
         return "low"
-    if data.get("student_number") and data.get("name"):
-        return "high"
-    if data.get("student_number") or data.get("name"):
+    blank = sum(1 for a in answers if not (a.get("answer_text") or "").strip())
+    if blank * 2 >= len(answers):
         return "medium"
-    return "low"
+    return "high"
 
 
 async def ocr_class_pdf(
@@ -109,13 +113,12 @@ async def ocr_class_pdf(
 
     Each record:
     {
-        "student_number": str | None,
-        "name": str | None,
         "page_indices": [int, ...],
         "ocr_confidence": "high"|"medium"|"low",
         "needs_review": bool,
         "answers": [{"question_number": str, "answer_text": str}]
     }
+    학번/이름은 OCR로 추출하지 않으며, 사용자가 직접 입력.
     """
     # PDF 한 번만 열고 전체 처리 후 닫음
     doc = fitz.open(pdf_path)
@@ -131,15 +134,13 @@ async def ocr_class_pdf(
             try:
                 data = await _call_gemini_for_student(client, doc, page_indices[:1], q_numbers)
             except Exception:
-                data = {"student_number": None, "name": None, "answers": []}
+                data = {"answers": []}
 
         confidence = _assess_confidence(data)
         needs_review = confidence == "low"
 
         results.append(
             {
-                "student_number": data.get("student_number"),
-                "name": data.get("name"),
                 "page_indices": page_indices,
                 "ocr_confidence": confidence,
                 "needs_review": needs_review,

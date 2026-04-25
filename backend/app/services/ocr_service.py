@@ -76,14 +76,15 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
                         )
                     except Exception as e2:
                         logger.warning(f"OCR fallback call failed for pages {page_indices[:1]}: {e2}")
-                        data = {"student_number": None, "name": None, "answers": []}
+                        data = {"answers": []}
 
                 confidence = _assess_confidence(data)
 
+                # 학번/이름은 OCR로 추출하지 않음 — 사용자가 표에 직접 입력
                 student = Student(
                     class_id=class_id,
-                    student_number=data.get("student_number"),
-                    name=data.get("name"),
+                    student_number=None,
+                    name=None,
                     page_indices=page_indices,
                     ocr_confidence=confidence,
                     needs_review=(confidence == "low"),
