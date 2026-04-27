@@ -72,9 +72,10 @@ export default function ApiKeySettingsPage() {
   const [showGuide, setShowGuide] = useState(false)
 
   return (
-    <div className="p-6 max-w-2xl mx-auto w-full">
+    <div className="flex-1 overflow-y-auto">
+      <div className="p-6 max-w-2xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Gemini API 키 설정</h1>
+        <h1 className="text-2xl font-bold text-slate-900">설정</h1>
         <Button variant="secondary" size="sm" onClick={() => setShowGuide(true)}>
           API 키 발급 안내
         </Button>
@@ -126,6 +127,7 @@ export default function ApiKeySettingsPage() {
           <UpdateChecker />
         </>
       )}
+      </div>
     </div>
   )
 }
