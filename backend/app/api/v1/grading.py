@@ -1,5 +1,8 @@
+from typing import Optional
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,6 +20,10 @@ from app.services.grading_service import run_grading
 router = APIRouter(tags=["grading"])
 
 
+class GradeRequest(BaseModel):
+    class_ids: Optional[list[int]] = None
+
+
 async def _get_exam_owned(exam_id: int, teacher_id: int, db: AsyncSession) -> Exam:
     exam = await db.get(Exam, exam_id)
     if exam is None:
@@ -30,16 +37,39 @@ async def _get_exam_owned(exam_id: int, teacher_id: int, db: AsyncSession) -> Ex
 async def start_grading(
     exam_id: int,
     background_tasks: BackgroundTasks,
+    body: GradeRequest | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    exam = await _get_exam_owned(exam_id, current_user.id, db)
+    """일괄 채점 시작. body.class_ids가 있으면 그 반만, 없으면 전체."""
+    await _get_exam_owned(exam_id, current_user.id, db)
 
     if not current_user.gemini_api_key_encrypted:
         raise HTTPException(status_code=400, detail="Gemini API key not configured")
 
-    background_tasks.add_task(run_grading, exam_id=exam_id, teacher_id=current_user.id)
-    return {"message": "Grading started in background"}
+    class_ids = body.class_ids if body else None
+    if class_ids is not None:
+        if not class_ids:
+            raise HTTPException(status_code=400, detail="채점할 반을 하나 이상 선택하세요.")
+        # 선택한 반들이 모두 이 시험에 속하는지 검증
+        result = await db.execute(
+            select(Class.id).where(Class.exam_id == exam_id, Class.id.in_(class_ids))
+        )
+        valid_ids = {row for row in result.scalars().all()}
+        invalid = set(class_ids) - valid_ids
+        if invalid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"이 시험에 속하지 않는 반: {sorted(invalid)}"
+            )
+
+    background_tasks.add_task(
+        run_grading,
+        exam_id=exam_id,
+        teacher_id=current_user.id,
+        class_ids=class_ids,
+    )
+    return {"message": "Grading started in background", "class_ids": class_ids}
 
 
 @router.get("/exams/{exam_id}/gradings")

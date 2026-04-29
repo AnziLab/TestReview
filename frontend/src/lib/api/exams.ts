@@ -37,8 +37,11 @@ export const examsApi = {
   getExtractionStatus: (id: number) =>
     apiFetch<{ status: 'pending' | 'processing' | 'done' | 'failed'; questions?: Question[] }>(`/exams/${id}/rubric-extraction`),
 
-  grade: (id: number) =>
-    apiFetch<{ task_id: string }>(`/exams/${id}/grade`, { method: 'POST' }),
+  grade: (id: number, classIds?: number[]) =>
+    apiFetch<{ task_id: string }>(`/exams/${id}/grade`, {
+      method: 'POST',
+      body: JSON.stringify(classIds && classIds.length > 0 ? { class_ids: classIds } : {}),
+    }),
 
   getGradingResults: (id: number) =>
     apiFetch<GradingResult[]>(`/exams/${id}/gradings`),

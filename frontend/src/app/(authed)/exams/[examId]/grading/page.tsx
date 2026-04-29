@@ -1,11 +1,11 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import useSWR from 'swr'
-import { examsApi, questionsApi } from '@/lib/api/exams'
+import { classesApi, examsApi, questionsApi } from '@/lib/api/exams'
 import type { GradingExportOptions } from '@/lib/api/exams'
 import { apiFetch } from '@/lib/api/client'
-import type { GradingResult } from '@/lib/types'
+import type { Class, GradingResult } from '@/lib/types'
 import { Badge, Button, Card, Modal, ProgressBar, SegmentedControl, Spinner, useConfirm, useToast } from '@/components/ui'
 
 interface QuestionDetail {
@@ -51,21 +51,23 @@ export default function GradingPage({
   const [regradingQ, setRegradingQ] = useState<number | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [gradeModalOpen, setGradeModalOpen] = useState(false)
+  const { data: classes } = useSWR(
+    `exams/${examId}/classes`,
+    () => classesApi.list(Number(examId))
+  )
   const [selectedStudent, setSelectedStudent] = useState<GradingResult | null>(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState<number | null>(null)
   const [detail, setDetail] = useState<QuestionDetail[] | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
-  const handleGrade = async () => {
-    const ok = await confirm({
-      title: '일괄 채점 실행',
-      description: '모든 학생의 답안을 채점합니다. 계속하시겠습니까?',
-      confirmLabel: '채점 시작',
-    })
-    if (!ok) return
+  const handleGrade = async (selectedClassIds: number[]) => {
+    setGradeModalOpen(false)
     setGrading(true)
     try {
-      await examsApi.grade(Number(examId))
+      // 전체 선택이면 class_ids 없이 (기존 동작 유지)
+      const isAll = !classes || selectedClassIds.length === classes.length
+      await examsApi.grade(Number(examId), isAll ? undefined : selectedClassIds)
       let attempts = 0
       const poll = async () => {
         attempts++
@@ -156,7 +158,7 @@ export default function GradingPage({
               />
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleGrade} loading={grading}>
+              <Button onClick={() => setGradeModalOpen(true)} loading={grading} disabled={grading}>
                 {grading ? '채점 중...' : '일괄 채점 실행'}
               </Button>
               {results && results.length > 0 && (
@@ -458,7 +460,106 @@ export default function GradingPage({
         onClose={() => setExportModalOpen(false)}
         onDownload={handleDownload}
       />
+      <GradeClassesModal
+        open={gradeModalOpen}
+        classes={classes ?? []}
+        onClose={() => setGradeModalOpen(false)}
+        onConfirm={handleGrade}
+      />
     </div>
+  )
+}
+
+function GradeClassesModal({
+  open, classes, onClose, onConfirm,
+}: {
+  open: boolean
+  classes: Class[]
+  onClose: () => void
+  onConfirm: (classIds: number[]) => void | Promise<void>
+}) {
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+
+  // 모달 열릴 때마다 전체 선택 상태로 초기화
+  useEffect(() => {
+    if (open) {
+      setSelected(new Set(classes.map((c) => c.id)))
+    }
+  }, [open, classes])
+
+  const toggle = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allSelected = classes.length > 0 && selected.size === classes.length
+  const noneSelected = selected.size === 0
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="채점할 반 선택"
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>취소</Button>
+          <Button
+            size="sm"
+            disabled={noneSelected}
+            onClick={() => onConfirm(Array.from(selected))}
+          >
+            {selected.size === classes.length
+              ? '전체 채점 시작'
+              : `선택한 ${selected.size}개 반 채점`}
+          </Button>
+        </>
+      }
+    >
+      {classes.length === 0 ? (
+        <p className="text-sm text-slate-500">등록된 반이 없습니다.</p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm text-slate-600">채점할 반에 체크하세요.</p>
+            <button
+              type="button"
+              onClick={() =>
+                setSelected(allSelected ? new Set() : new Set(classes.map((c) => c.id)))
+              }
+              className="text-xs text-indigo-600 hover:text-indigo-800"
+            >
+              {allSelected ? '전체 해제' : '전체 선택'}
+            </button>
+          </div>
+          <div className="space-y-1 max-h-80 overflow-y-auto">
+            {classes.map((c) => (
+              <label
+                key={c.id}
+                className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(c.id)}
+                  onChange={() => toggle(c.id)}
+                  className="accent-indigo-500"
+                />
+                <span className="text-sm font-medium text-slate-800">{c.name}</span>
+                <span className="ml-auto text-xs text-slate-500">
+                  {c.student_count ?? 0}명
+                </span>
+              </label>
+            ))}
+          </div>
+          {noneSelected && (
+            <p className="text-xs text-rose-600 mt-3">하나 이상 선택하세요.</p>
+          )}
+        </>
+      )}
+    </Modal>
   )
 }
 

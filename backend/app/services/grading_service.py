@@ -9,6 +9,7 @@ from app.database import AsyncSessionLocal
 from app.gemini.client import get_gemini_client
 from app.gemini.grading import grade_answers
 from app.models.answer import Answer
+from app.models.class_ import Student
 from app.models.exam import Exam, Question
 from app.models.grading import Grading
 from app.models.user import User
@@ -20,13 +21,18 @@ async def _grade_question(
     db, client, question,
     extra_instructions: str | None = None,
     prompt_override: str | None = None,
+    class_ids: list[int] | None = None,
 ) -> None:
-    """문항 1개 채점 (upsert). 공통 로직."""
+    """문항 1개 채점 (upsert). 공통 로직.
+
+    class_ids가 주어지면 해당 반에 속한 학생의 답안만 채점.
+    """
     from app.gemini.grading import grade_answers
 
-    answers = (await db.execute(
-        select(Answer).where(Answer.question_id == question.id)
-    )).scalars().all()
+    stmt = select(Answer).where(Answer.question_id == question.id)
+    if class_ids:
+        stmt = stmt.join(Student, Answer.student_id == Student.id).where(Student.class_id.in_(class_ids))
+    answers = (await db.execute(stmt)).scalars().all()
     if not answers:
         return
 
@@ -95,8 +101,15 @@ async def run_grading_question(question_id: int, teacher_id: int) -> None:
             logger.exception(f"Re-grading failed for question {question_id}: {exc}")
 
 
-async def run_grading(exam_id: int, teacher_id: int) -> None:
-    """BackgroundTask: auto-grade all answers for an exam question by question."""
+async def run_grading(
+    exam_id: int,
+    teacher_id: int,
+    class_ids: list[int] | None = None,
+) -> None:
+    """BackgroundTask: auto-grade all answers for an exam question by question.
+
+    class_ids가 주어지면 그 반의 학생 답안만 채점, 미지정 시 전체 반.
+    """
     async with AsyncSessionLocal() as db:
         exam = await db.get(Exam, exam_id)
         if exam is None:
@@ -121,14 +134,17 @@ async def run_grading(exam_id: int, teacher_id: int) -> None:
                         db, client, question,
                         extra_instructions=teacher.grading_extra_instructions,
                         prompt_override=teacher.grading_prompt_override,
+                        class_ids=class_ids,
                     )
                 except Exception as exc:
                     logger.warning(f"Grading failed for question {question.id}: {exc}")
                     continue
 
-            exam.status = "graded"
+            # 전체 반을 채점한 경우에만 status를 graded로 변경
+            if not class_ids:
+                exam.status = "graded"
             await db.commit()
-            logger.info(f"Grading done for exam {exam_id}")
+            logger.info(f"Grading done for exam {exam_id} (classes={class_ids or 'all'})")
 
         except Exception as exc:
             logger.exception(f"Grading failed for exam {exam_id}: {exc}")
