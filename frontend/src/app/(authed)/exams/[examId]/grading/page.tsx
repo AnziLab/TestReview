@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { Fragment, use, useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { classesApi, examsApi, questionsApi } from '@/lib/api/exams'
 import type { GradingExportOptions } from '@/lib/api/exams'
@@ -343,7 +343,7 @@ export default function GradingPage({
                     const multiClass = groups.length > 1
 
                     return groups.map(({ className, students: classStudents }) => (
-                      <>
+                      <Fragment key={`group-${className}`}>
                         {multiClass && (
                           <tr key={`header-${className}`}>
                             <td
@@ -381,7 +381,7 @@ export default function GradingPage({
                             </td>
                           </tr>
                         ))}
-                      </>
+                      </Fragment>
                     ))
                   })()}
                 </tbody>
