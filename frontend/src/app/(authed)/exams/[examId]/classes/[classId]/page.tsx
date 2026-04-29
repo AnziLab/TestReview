@@ -132,7 +132,7 @@ function StudentRow({
   onSelect: () => void
   onUpdated: () => void
 }) {
-  const { data: answers } = useSWR(
+  const { data: answers, mutate: mutateAnswers } = useSWR(
     `students/${student.id}/answers`,
     () => studentsApi.getAnswers(student.id)
   )
@@ -140,6 +140,7 @@ function StudentRow({
   const [editing, setEditing] = useState(false)
   const [vals, setVals] = useState({ student_number: student.student_number || '', name: student.name || '' })
   const [saving, setSaving] = useState(false)
+  const [reOcrLoading, setReOcrLoading] = useState(false)
 
   const answerMap: Record<number, string> = {}
   answers?.forEach((a: Answer) => { answerMap[a.question_id] = a.answer_text })
@@ -157,6 +158,21 @@ function StudentRow({
       toast(e instanceof Error ? e.message : '저장 실패', 'danger')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleReOcr = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setReOcrLoading(true)
+    try {
+      await studentsApi.reOcr(student.id)
+      await mutateAnswers()
+      onUpdated()
+      toast('재OCR 완료', 'success')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '재OCR 실패', 'danger')
+    } finally {
+      setReOcrLoading(false)
     }
   }
 
@@ -207,6 +223,16 @@ function StudentRow({
               className="ml-1 text-slate-300 hover:text-indigo-500"
             >
               ✎
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleReOcr}
+              loading={reOcrLoading}
+              className="text-slate-300 hover:text-indigo-500"
+              title="이 학생 답안 페이지만 다시 OCR"
+            >
+              🔄
             </Button>
           </div>
         )}

@@ -112,6 +112,8 @@ export const studentsApi = {
     apiFetch<Student>(`/students/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   getAnswers: (id: number) => apiFetch<Answer[]>(`/students/${id}/answers`),
+
+  reOcr: (id: number) => apiFetch<Student>(`/students/${id}/re-ocr`, { method: 'POST' }),
 }
 
 export const answersApi = {
