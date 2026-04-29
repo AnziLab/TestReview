@@ -82,7 +82,12 @@ async def export_gradings_xlsx(db: AsyncSession, exam_id: int) -> bytes:
     ws = wb.active
     ws.title = "채점결과"
 
-    header = ["반", "학번", "이름"] + [f"문{q.number}({q.max_score}점)" for q in questions] + ["합계"]
+    # 각 문항당 [점수, 채점이유] 두 컬럼
+    header = ["반", "학번", "이름"]
+    for q in questions:
+        header.append(f"문{q.number}({q.max_score}점)")
+        header.append(f"문{q.number} 채점이유")
+    header.append("합계")
     ws.append(header)
     for cell in ws[1]:
         cell.font = Font(bold=True)
@@ -90,21 +95,44 @@ async def export_gradings_xlsx(db: AsyncSession, exam_id: int) -> bytes:
 
     for cls in classes:
         for student in cls.students:
-            grading_map: dict[int, float] = {}
+            score_map: dict[int, float] = {}
+            rationale_map: dict[int, str] = {}
             for answer in student.answers:
                 g = answer.grading
                 if g is not None:
-                    grading_map[answer.question_id] = float(g.score)
+                    score_map[answer.question_id] = float(g.score)
+                    rationale_map[answer.question_id] = g.rationale or ""
 
-            row = [cls.name, student.student_number or "", student.name or ""]
+            row: list = [cls.name, student.student_number or "", student.name or ""]
             total = 0.0
             for q in questions:
-                score = grading_map.get(q.id, "")
+                score = score_map.get(q.id, "")
                 row.append(score)
+                row.append(rationale_map.get(q.id, ""))
                 if isinstance(score, float):
                     total += score
             row.append(total)
             ws.append(row)
+
+    # 컬럼 너비 + 채점이유 셀 텍스트 줄바꿈
+    from openpyxl.utils import get_column_letter
+    ws.column_dimensions[get_column_letter(1)].width = 10  # 반
+    ws.column_dimensions[get_column_letter(2)].width = 10  # 학번
+    ws.column_dimensions[get_column_letter(3)].width = 10  # 이름
+    # 4번부터 문항별 [점수, 이유] 반복
+    col = 4
+    for _ in questions:
+        ws.column_dimensions[get_column_letter(col)].width = 10      # 점수
+        ws.column_dimensions[get_column_letter(col + 1)].width = 40  # 이유
+        col += 2
+    ws.column_dimensions[get_column_letter(col)].width = 10  # 합계
+
+    # 채점이유 셀에 자동 줄바꿈 적용 (header 제외, 데이터 row만)
+    rationale_cols = [4 + i * 2 + 1 for i in range(len(questions))]
+    wrap = Alignment(wrap_text=True, vertical="top")
+    for row_idx in range(2, ws.max_row + 1):
+        for c in rationale_cols:
+            ws.cell(row=row_idx, column=c).alignment = wrap
 
     buf = io.BytesIO()
     wb.save(buf)
