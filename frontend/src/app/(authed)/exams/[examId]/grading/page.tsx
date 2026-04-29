@@ -412,7 +412,9 @@ export default function GradingPage({
                 </svg>
               </button>
             </div>
-            <QuestionAnswerList questionId={selectedQuestionId} />
+            <div className="flex-1 overflow-y-auto">
+              <QuestionAnswerList questionId={selectedQuestionId} />
+            </div>
           </div>
         )
       })()}
