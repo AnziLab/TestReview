@@ -3,9 +3,10 @@
 import { use, useState } from 'react'
 import useSWR from 'swr'
 import { examsApi, questionsApi } from '@/lib/api/exams'
+import type { GradingExportOptions } from '@/lib/api/exams'
 import { apiFetch } from '@/lib/api/client'
 import type { GradingResult } from '@/lib/types'
-import { Badge, Button, Card, ProgressBar, SegmentedControl, Spinner, useConfirm, useToast } from '@/components/ui'
+import { Badge, Button, Card, Modal, ProgressBar, SegmentedControl, Spinner, useConfirm, useToast } from '@/components/ui'
 
 interface QuestionDetail {
   question_id: number
@@ -49,6 +50,7 @@ export default function GradingPage({
   const [grading, setGrading] = useState(false)
   const [regradingQ, setRegradingQ] = useState<number | null>(null)
   const [downloading, setDownloading] = useState(false)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<GradingResult | null>(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState<number | null>(null)
   const [detail, setDetail] = useState<QuestionDetail[] | null>(null)
@@ -86,10 +88,10 @@ export default function GradingPage({
     }
   }
 
-  const handleDownload = async () => {
+  const handleDownload = async (options: GradingExportOptions) => {
     setDownloading(true)
     try {
-      const res = await examsApi.downloadGradingExcel(Number(examId))
+      const res = await examsApi.downloadGradingExcel(Number(examId), options)
       if (!res.ok) throw new Error('다운로드 실패')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -98,6 +100,7 @@ export default function GradingPage({
       a.download = `채점결과_${examId}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
+      setExportModalOpen(false)
     } catch (e) {
       toast(e instanceof Error ? e.message : '다운로드 실패', 'danger')
     } finally {
@@ -157,7 +160,7 @@ export default function GradingPage({
                 {grading ? '채점 중...' : '일괄 채점 실행'}
               </Button>
               {results && results.length > 0 && (
-                <Button variant="secondary" onClick={handleDownload} disabled={downloading}>
+                <Button variant="secondary" onClick={() => setExportModalOpen(true)} disabled={downloading}>
                   Excel 다운로드
                 </Button>
               )}
@@ -449,7 +452,84 @@ export default function GradingPage({
           </div>
         </div>
       )}
+      <ExportOptionsModal
+        open={exportModalOpen}
+        downloading={downloading}
+        onClose={() => setExportModalOpen(false)}
+        onDownload={handleDownload}
+      />
     </div>
+  )
+}
+
+function ExportOptionsModal({
+  open, downloading, onClose, onDownload,
+}: {
+  open: boolean
+  downloading: boolean
+  onClose: () => void
+  onDownload: (options: GradingExportOptions) => void | Promise<void>
+}) {
+  const [score, setScore] = useState(true)
+  const [rationale, setRationale] = useState(true)
+  const [answer, setAnswer] = useState(false)
+  const [modelAnswer, setModelAnswer] = useState(false)
+  const [criteria, setCriteria] = useState(false)
+  const [total, setTotal] = useState(true)
+
+  const items: { key: string; label: string; hint?: string; checked: boolean; setter: (v: boolean) => void }[] = [
+    { key: 'score', label: '점수', hint: '문항별 점수 (배점 표시 포함)', checked: score, setter: setScore },
+    { key: 'rationale', label: '채점 이유', hint: 'AI가 적은 채점 근거', checked: rationale, setter: setRationale },
+    { key: 'answer', label: '학생 답안 텍스트', hint: 'OCR로 읽은 학생 응답', checked: answer, setter: setAnswer },
+    { key: 'modelAnswer', label: '모범답안', hint: '문항별 정답 (모든 행에 동일)', checked: modelAnswer, setter: setModelAnswer },
+    { key: 'criteria', label: '매칭된 채점기준', hint: 'AI가 적용한 채점 기준 설명', checked: criteria, setter: setCriteria },
+    { key: 'total', label: '합계', hint: '학생별 총점', checked: total, setter: setTotal },
+  ]
+
+  const anyChecked = score || rationale || answer || modelAnswer || criteria || total
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="엑셀 다운로드 옵션"
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>취소</Button>
+          <Button
+            size="sm"
+            loading={downloading}
+            disabled={!anyChecked}
+            onClick={() => onDownload({ score, rationale, answer, modelAnswer, criteria, total })}
+          >
+            다운로드
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-slate-600 mb-3">
+        포함할 컬럼을 선택하세요. 반/학번/이름은 항상 포함됩니다.
+      </p>
+      <div className="space-y-2">
+        {items.map((it) => (
+          <label key={it.key} className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-slate-50">
+            <input
+              type="checkbox"
+              checked={it.checked}
+              onChange={(e) => it.setter(e.target.checked)}
+              className="mt-0.5 accent-indigo-500"
+            />
+            <div>
+              <div className="text-sm font-medium text-slate-800">{it.label}</div>
+              {it.hint && <div className="text-xs text-slate-500">{it.hint}</div>}
+            </div>
+          </label>
+        ))}
+      </div>
+      {!anyChecked && (
+        <p className="text-xs text-rose-600 mt-3">최소 하나 이상 선택해야 합니다.</p>
+      )}
+    </Modal>
   )
 }
 

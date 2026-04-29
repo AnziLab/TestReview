@@ -1,6 +1,15 @@
 import { apiFetch } from './client'
 import type { Exam, Question, RubricJson, Class, Student, Answer, RefinementSession, AnswerCluster, GradingResult } from '../types'
 
+export interface GradingExportOptions {
+  score: boolean
+  rationale: boolean
+  answer: boolean
+  modelAnswer: boolean
+  criteria: boolean
+  total: boolean
+}
+
 export const examsApi = {
   list: () => apiFetch<Exam[]>('/exams'),
 
@@ -34,13 +43,25 @@ export const examsApi = {
   getGradingResults: (id: number) =>
     apiFetch<GradingResult[]>(`/exams/${id}/gradings`),
 
-  downloadGradingExcel: (id: number) =>
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/exams/${id}/gradings.xlsx`, {
+  downloadGradingExcel: (id: number, options?: GradingExportOptions) => {
+    const params = new URLSearchParams()
+    if (options) {
+      params.set('score', options.score ? '1' : '0')
+      params.set('rationale', options.rationale ? '1' : '0')
+      params.set('answer', options.answer ? '1' : '0')
+      params.set('model_answer', options.modelAnswer ? '1' : '0')
+      params.set('criteria', options.criteria ? '1' : '0')
+      params.set('total', options.total ? '1' : '0')
+    }
+    const qs = params.toString()
+    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/exams/${id}/gradings.xlsx${qs ? `?${qs}` : ''}`
+    return fetch(url, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`,
       },
       credentials: 'include',
-    }),
+    })
+  },
 }
 
 export const questionsApi = {

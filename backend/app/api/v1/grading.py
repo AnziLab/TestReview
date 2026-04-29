@@ -115,11 +115,25 @@ async def update_grading(
 @router.get("/exams/{exam_id}/gradings.xlsx")
 async def download_gradings_xlsx(
     exam_id: int,
+    score: int = 1,
+    rationale: int = 1,
+    answer: int = 0,
+    model_answer: int = 0,
+    criteria: int = 0,
+    total: int = 1,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await _get_exam_owned(exam_id, current_user.id, db)
-    xlsx_bytes = await export_gradings_xlsx(db, exam_id)
+    xlsx_bytes = await export_gradings_xlsx(
+        db, exam_id,
+        include_score=bool(score),
+        include_rationale=bool(rationale),
+        include_answer=bool(answer),
+        include_model_answer=bool(model_answer),
+        include_criteria=bool(criteria),
+        include_total=bool(total),
+    )
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
