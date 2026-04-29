@@ -144,14 +144,13 @@ async def apply_update(current_user: User = Depends(require_admin)):
     venv_pip = backend_dir / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / "pip"
     results.append(run([str(venv_pip), "install", "-r", "requirements.txt", "--quiet"], cwd=backend_dir))
 
-    # 3. DB 마이그레이션
-    venv_alembic = backend_dir / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / "alembic"
-    results.append(run([str(venv_alembic), "upgrade", "head"], cwd=backend_dir))
-
-    # 4. 프론트엔드 패키지 업데이트
+    # 3. 프론트엔드 패키지 업데이트
     frontend_dir = ROOT_DIR / "frontend"
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
     results.append(run([npm_cmd, "install", "--silent"], cwd=frontend_dir))
+
+    # DB 마이그레이션은 여기서 돌리면 실행 중인 앱이 SQLite를 잡고 있어 잠금 충돌이 남.
+    # → start.bat / start.sh가 앱 시작 시(이전 uvicorn kill 후) 자동으로 alembic upgrade 실행.
 
     errors = [r for r in results if not r["ok"]]
 
@@ -159,5 +158,8 @@ async def apply_update(current_user: User = Depends(require_admin)):
         "success": len(errors) == 0,
         "restart_required": True,
         "results": results,
-        "message": "업데이트 완료. 앱을 재시작해주세요." if not errors else f"일부 단계 실패: {errors[0]['err']}",
+        "message": (
+            "업데이트 완료. 앱을 재시작하면 DB 마이그레이션이 자동 적용됩니다."
+            if not errors else f"일부 단계 실패: {errors[0]['err']}"
+        ),
     }

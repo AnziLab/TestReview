@@ -55,7 +55,13 @@ call .venv\Scripts\activate.bat
 if not exist ".env" (
     echo Generating .env...
     python scripts\gen_env.py .env
-    alembic upgrade head
+)
+
+:: Apply DB migrations on every startup (after killing old uvicorn so DB is unlocked)
+echo Applying DB migrations...
+alembic upgrade head 2>>..\logs\backend.log
+if %errorlevel% neq 0 (
+    echo [!] Migration failed - check logs\backend.log
 )
 
 start /min "" cmd /c "cd /d "%INSTALL_DIR%backend" && .venv\Scripts\activate.bat && uvicorn app.main:app --host 127.0.0.1 --port 8000 2>>..\logs\backend.log"
