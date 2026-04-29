@@ -134,7 +134,15 @@ export const studentsApi = {
 
   getAnswers: (id: number) => apiFetch<Answer[]>(`/students/${id}/answers`),
 
-  reOcr: (id: number) => apiFetch<Student>(`/students/${id}/re-ocr`, { method: 'POST' }),
+  reOcr: (id: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return apiFetch<Student>(`/students/${id}/re-ocr`, {
+      method: 'POST',
+      body: form,
+      skipContentType: true,
+    })
+  },
 }
 
 export const answersApi = {

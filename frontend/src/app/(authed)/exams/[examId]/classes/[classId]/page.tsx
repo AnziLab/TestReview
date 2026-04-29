@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useMemo, useState } from 'react'
+import { use, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { classesApi, studentsApi, questionsApi, answersApi } from '@/lib/api/exams'
 import type { Student, Answer, Question } from '@/lib/types'
@@ -161,11 +161,20 @@ function StudentRow({
     }
   }
 
-  const handleReOcr = async (e: React.MouseEvent) => {
+  const reOcrInputRef = useRef<HTMLInputElement>(null)
+
+  const handleReOcrClick = (e: React.MouseEvent) => {
     e.stopPropagation()
+    reOcrInputRef.current?.click()
+  }
+
+  const handleReOcrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = '' // 같은 파일 재선택 가능하게 리셋
+    if (!f) return
     setReOcrLoading(true)
     try {
-      await studentsApi.reOcr(student.id)
+      await studentsApi.reOcr(student.id, f)
       await mutateAnswers()
       onUpdated()
       toast('재OCR 완료', 'success')
@@ -227,13 +236,20 @@ function StudentRow({
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleReOcr}
+              onClick={handleReOcrClick}
               loading={reOcrLoading}
               className="text-slate-300 hover:text-indigo-500"
-              title="이 학생 답안 페이지만 다시 OCR"
+              title="원본 답안 PDF를 다시 올려서 이 학생 페이지만 OCR"
             >
               🔄
             </Button>
+            <input
+              ref={reOcrInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={handleReOcrFile}
+            />
           </div>
         )}
       </td>

@@ -1,6 +1,7 @@
+import io
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,46 +83,75 @@ async def update_student(
 @router.post("/students/{student_id}/re-ocr", response_model=StudentOut)
 async def re_ocr_student(
     student_id: int,
+    file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """학생 1명의 페이지만 다시 OCR. 반 전체 재처리 없이 인식 안 된 row만 갱신."""
+    """학생 1명의 페이지만 다시 OCR.
+
+    사용자가 원본 답안 PDF를 다시 업로드하면 그 파일에서 student.page_indices에 해당하는
+    페이지만 골라 Gemini로 OCR. 반 전체 재처리 없이 인식 안 된 row만 갱신.
+    저장된 파일에 의존하지 않으므로 다른 환경에서도 작동.
+    """
     student = await _get_student_owned(student_id, current_user.id, db)
     cls = await db.get(Class, student.class_id)
-    if not cls or not cls.source_pdf_path:
-        raise HTTPException(status_code=400, detail="원본 PDF가 없습니다. 반을 다시 업로드해주세요.")
+    if cls is None:
+        raise HTTPException(status_code=404, detail="Class not found")
     if not student.page_indices:
         raise HTTPException(status_code=400, detail="이 학생의 페이지 정보가 없습니다.")
     if not current_user.gemini_api_key_encrypted:
         raise HTTPException(status_code=400, detail="Gemini API key not configured")
 
+    pdf_bytes = await file.read()
+    if not pdf_bytes:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
     from app.gemini.client import get_gemini_client
     from app.gemini.ocr import _assess_confidence, _call_gemini_for_student
     import fitz
 
-    # 문항 번호 목록 로드
-    q_result = await db.execute(
-        select(Question)
-        .where(Question.exam_id == cls.exam_id)
-        .order_by(Question.order_index)
-    )
-    questions_list = q_result.scalars().all()
-    questions_by_number = {q.number: q for q in questions_list}
-    question_numbers = [q.number for q in questions_list]
-
-    client = get_gemini_client(current_user.gemini_api_key_encrypted)
-    doc = fitz.open(cls.source_pdf_path)
+    # 업로드된 PDF 열기
     try:
+        doc = fitz.open(stream=io.BytesIO(pdf_bytes), filetype="pdf")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"PDF를 열 수 없습니다: {e}")
+
+    try:
+        # 학생 page_indices가 업로드된 PDF 범위 내에 있는지 확인
+        total_pages = len(doc)
+        page_indices = list(student.page_indices)
+        for p in page_indices:
+            if p < 0 or p >= total_pages:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"이 학생의 페이지 번호({p+1}번)가 업로드한 PDF의 범위(총 {total_pages}장)를 벗어납니다. "
+                        f"같은 반을 업로드할 때 사용한 그 PDF 파일이 맞는지 확인해주세요."
+                    )
+                )
+
+        # 문항 번호 목록 로드
+        q_result = await db.execute(
+            select(Question)
+            .where(Question.exam_id == cls.exam_id)
+            .order_by(Question.order_index)
+        )
+        questions_list = q_result.scalars().all()
+        questions_by_number = {q.number: q for q in questions_list}
+        question_numbers = [q.number for q in questions_list]
+
+        client = get_gemini_client(current_user.gemini_api_key_encrypted)
+
         try:
             data = await _call_gemini_for_student(
-                client, doc, list(student.page_indices), question_numbers,
+                client, doc, page_indices, question_numbers,
                 current_user.ocr_prompt_override,
             )
         except Exception as e:
             logger.warning(f"Re-OCR primary call failed for student {student_id}: {e}")
             try:
                 data = await _call_gemini_for_student(
-                    client, doc, list(student.page_indices)[:1], question_numbers,
+                    client, doc, page_indices[:1], question_numbers,
                     current_user.ocr_prompt_override,
                 )
             except Exception as e2:
