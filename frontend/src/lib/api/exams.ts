@@ -78,11 +78,20 @@ export const classesApi = {
 
   get: (id: number) => apiFetch<Class>(`/classes/${id}`),
 
-  create: (examId: number, data: { name: string; scan_mode: 'single' | 'double' }, file: File) => {
+  create: (
+    examId: number,
+    data: { name: string; scan_mode: 'single' | 'double' | 'split' },
+    files: { file: File } | { frontFile: File; backFile: File },
+  ) => {
     const form = new FormData()
     form.append('name', data.name)
     form.append('scan_mode', data.scan_mode)
-    form.append('file', file)
+    if ('file' in files) {
+      form.append('file', files.file)
+    } else {
+      form.append('front_file', files.frontFile)
+      form.append('back_file', files.backFile)
+    }
     return apiFetch<Class>(`/exams/${examId}/classes`, {
       method: 'POST',
       body: form,

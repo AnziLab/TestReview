@@ -141,8 +141,10 @@ function AddClassModal({ examId, open, onClose, onAdded }: AddClassModalProps) {
   const toast = useToast()
   const [step, setStep] = useState<'form' | 'confirm'>('form')
   const [name, setName] = useState('')
-  const [scanMode, setScanMode] = useState<'single' | 'double'>('single')
+  const [scanMode, setScanMode] = useState<'single' | 'double' | 'split'>('single')
   const [file, setFile] = useState<File | null>(null)
+  const [frontFile, setFrontFile] = useState<File | null>(null)
+  const [backFile, setBackFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
@@ -151,24 +153,43 @@ function AddClassModal({ examId, open, onClose, onAdded }: AddClassModalProps) {
     setName('')
     setScanMode('single')
     setFile(null)
+    setFrontFile(null)
+    setBackFile(null)
     setError('')
     onClose()
   }
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!file) { setError('파일을 선택하세요.'); return }
     if (!name.trim()) { setError('반 이름을 입력하세요.'); return }
+    if (scanMode === 'split') {
+      if (!frontFile || !backFile) { setError('앞면과 뒷면 PDF 두 개 모두 선택하세요.'); return }
+    } else {
+      if (!file) { setError('파일을 선택하세요.'); return }
+    }
     setError('')
     setStep('confirm')
   }
 
   const handleConfirm = async () => {
-    if (!file) return
     setUploading(true)
     setError('')
     try {
-      await classesApi.create(Number(examId), { name, scan_mode: scanMode }, file)
+      if (scanMode === 'split') {
+        if (!frontFile || !backFile) return
+        await classesApi.create(
+          Number(examId),
+          { name, scan_mode: 'split' },
+          { frontFile, backFile },
+        )
+      } else {
+        if (!file) return
+        await classesApi.create(
+          Number(examId),
+          { name, scan_mode: scanMode },
+          { file },
+        )
+      }
       onAdded()
       handleClose()
       toast('반이 추가되었습니다. OCR 처리가 시작됩니다.', 'success')
@@ -209,25 +230,55 @@ function AddClassModal({ examId, open, onClose, onAdded }: AddClassModalProps) {
           />
           <div>
             <label className="text-sm font-medium text-slate-700 block mb-2">스캔 방식</label>
-            <div className="flex gap-4">
-              {(['single', 'double'] as const).map((mode) => (
+            <div className="flex flex-col gap-2">
+              {(['single', 'double', 'split'] as const).map((mode) => (
                 <label key={mode} className="flex items-center gap-2 cursor-pointer">
                   <input type="radio" name="scanMode" checked={scanMode === mode}
                     onChange={() => setScanMode(mode)} className="accent-indigo-500" />
-                  <span className="text-sm text-slate-700">{mode === 'single' ? '단면 (학생 1명 = 1페이지)' : '양면 (학생 1명 = 2페이지)'}</span>
+                  <span className="text-sm text-slate-700">
+                    {mode === 'single' && '단면 (학생 1명 = 1페이지)'}
+                    {mode === 'double' && '양면 (학생 1명 = 2페이지, PDF 1개)'}
+                    {mode === 'split' && '앞뒤 분리 스캔 (앞면 PDF + 뒷면 PDF, 얇은 답안지용)'}
+                  </span>
                 </label>
               ))}
             </div>
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1.5">PDF 파일 *</label>
-            <FileDropzone
-              accept=".pdf"
-              value={file}
-              onChange={setFile}
-              hint="PDF 파일을 클릭하거나 드래그하세요"
-            />
-          </div>
+          {scanMode === 'split' ? (
+            <>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">앞면 PDF *</label>
+                <FileDropzone
+                  accept=".pdf"
+                  value={frontFile}
+                  onChange={setFrontFile}
+                  hint="모든 학생의 앞면을 한 번에 스캔한 PDF"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">뒷면 PDF *</label>
+                <FileDropzone
+                  accept=".pdf"
+                  value={backFile}
+                  onChange={setBackFile}
+                  hint="같은 순서로 뒷면을 스캔한 PDF (페이지 수 동일)"
+                />
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                두 PDF의 N번째 페이지가 같은 학생의 앞/뒷면이어야 합니다. 페이지 수가 다르면 업로드가 실패합니다.
+              </p>
+            </>
+          ) : (
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1.5">PDF 파일 *</label>
+              <FileDropzone
+                accept=".pdf"
+                value={file}
+                onChange={setFile}
+                hint="PDF 파일을 클릭하거나 드래그하세요"
+              />
+            </div>
+          )}
           {error && <p className="text-sm text-rose-600">{error}</p>}
         </form>
       ) : (
@@ -239,12 +290,29 @@ function AddClassModal({ examId, open, onClose, onAdded }: AddClassModalProps) {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-slate-500">스캔 방식</span>
-              <span className="font-medium text-slate-800">{scanMode === 'single' ? '단면' : '양면'}</span>
+              <span className="font-medium text-slate-800">
+                {scanMode === 'single' && '단면'}
+                {scanMode === 'double' && '양면'}
+                {scanMode === 'split' && '앞뒤 분리'}
+              </span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">파일</span>
-              <span className="font-medium text-indigo-600">{file?.name}</span>
-            </div>
+            {scanMode === 'split' ? (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">앞면 PDF</span>
+                  <span className="font-medium text-indigo-600">{frontFile?.name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">뒷면 PDF</span>
+                  <span className="font-medium text-indigo-600">{backFile?.name}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">파일</span>
+                <span className="font-medium text-indigo-600">{file?.name}</span>
+              </div>
+            )}
           </div>
           <p className="text-sm text-slate-600">
             업로드 후 Gemini가 각 학생의 답안을 자동으로 인식합니다. 파일이 맞는지 확인해주세요.

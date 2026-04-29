@@ -16,6 +16,37 @@ from app.storage.local import storage
 router = APIRouter(tags=["classes"])
 
 
+def _interleave_pdfs(front_bytes: bytes, back_bytes: bytes) -> tuple[bytes, int]:
+    """앞면 PDF와 뒷면 PDF를 [앞0, 뒤0, 앞1, 뒤1, ...] 순으로 한 PDF에 합친다.
+
+    같은 N번째 페이지가 동일 학생의 앞/뒷면이라고 가정.
+    페이지 수가 다르면 400.
+    """
+    import io
+    import fitz
+    front = fitz.open(stream=io.BytesIO(front_bytes), filetype="pdf")
+    back = fitz.open(stream=io.BytesIO(back_bytes), filetype="pdf")
+    try:
+        if len(front) != len(back):
+            raise HTTPException(
+                status_code=400,
+                detail=f"앞면 PDF는 {len(front)}장, 뒷면 PDF는 {len(back)}장입니다. 두 PDF의 페이지 수가 같아야 합니다."
+            )
+        merged = fitz.open()
+        try:
+            for i in range(len(front)):
+                merged.insert_pdf(front, from_page=i, to_page=i)
+                merged.insert_pdf(back, from_page=i, to_page=i)
+            out = merged.tobytes()
+            pages = len(merged)
+        finally:
+            merged.close()
+    finally:
+        front.close()
+        back.close()
+    return out, pages
+
+
 async def _class_to_out(cls: Class, db: AsyncSession):
     count_result = await db.execute(
         select(func.count()).select_from(Student).where(Student.class_id == cls.id)
@@ -82,37 +113,59 @@ async def create_class(
     background_tasks: BackgroundTasks,
     name: str = Form(...),
     scan_mode: str = Form("single"),
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(None),
+    front_file: UploadFile | None = File(None),
+    back_file: UploadFile | None = File(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    exam = await _get_exam_owned(exam_id, current_user.id, db)
+    await _get_exam_owned(exam_id, current_user.id, db)
 
     if not current_user.gemini_api_key_encrypted:
         raise HTTPException(status_code=400, detail="Gemini API key not configured")
 
-    if scan_mode not in ("single", "double"):
-        raise HTTPException(status_code=400, detail="scan_mode must be 'single' or 'double'")
+    if scan_mode not in ("single", "double", "split"):
+        raise HTTPException(status_code=400, detail="scan_mode must be 'single', 'double', or 'split'")
 
-    data = await file.read()
-    ext = Path(file.filename or "answers.pdf").suffix
-    rel_path = f"classes/{exam_id}/{uuid.uuid4()}{ext}"
-    saved_path = await storage.save(data, rel_path)
-
-    # PDF 페이지 수 미리 계산
-    import fitz as _fitz, io as _io
-    try:
-        _doc = _fitz.open(stream=_io.BytesIO(data), filetype="pdf")
-        pdf_pages = len(_doc)
-        _doc.close()
-    except Exception:
-        pdf_pages = None
+    if scan_mode == "split":
+        if front_file is None or back_file is None:
+            raise HTTPException(
+                status_code=400,
+                detail="앞뒤 분리 스캔은 앞면 PDF와 뒷면 PDF 두 개가 모두 필요합니다."
+            )
+        front_data = await front_file.read()
+        back_data = await back_file.read()
+        merged_data, pdf_pages = _interleave_pdfs(front_data, back_data)
+        rel_path = f"classes/{exam_id}/{uuid.uuid4()}.pdf"
+        saved_path = await storage.save(merged_data, rel_path)
+        # 인터리브 결과는 양면 PDF와 동일한 구조 → DB에는 "double"로 저장
+        stored_scan_mode = "double"
+        front_name = Path(front_file.filename or "front").stem
+        back_name = Path(back_file.filename or "back").stem
+        stored_filename = f"{front_name}+{back_name}.pdf"
+    else:
+        if file is None:
+            raise HTTPException(status_code=400, detail="PDF 파일이 필요합니다.")
+        data = await file.read()
+        ext = Path(file.filename or "answers.pdf").suffix
+        rel_path = f"classes/{exam_id}/{uuid.uuid4()}{ext}"
+        saved_path = await storage.save(data, rel_path)
+        # PDF 페이지 수 미리 계산
+        import fitz as _fitz, io as _io
+        try:
+            _doc = _fitz.open(stream=_io.BytesIO(data), filetype="pdf")
+            pdf_pages = len(_doc)
+            _doc.close()
+        except Exception:
+            pdf_pages = None
+        stored_scan_mode = scan_mode
+        stored_filename = file.filename
 
     cls = Class(
         exam_id=exam_id,
         name=name,
-        scan_mode=scan_mode,
-        source_pdf_filename=file.filename,
+        scan_mode=stored_scan_mode,
+        source_pdf_filename=stored_filename,
         source_pdf_path=saved_path,
         source_pdf_pages=pdf_pages,
         ocr_status="pending",
