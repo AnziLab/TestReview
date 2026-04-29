@@ -72,6 +72,23 @@ async def start_grading(
     return {"message": "Grading started in background", "class_ids": class_ids}
 
 
+@router.get("/exams/{exam_id}/grading-status")
+async def grading_status(
+    exam_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """일괄 채점 진행상황. 프론트엔드에서 폴링."""
+    exam = await _get_exam_owned(exam_id, current_user.id, db)
+    return {
+        "id": exam.id,
+        "grading_status": exam.grading_status,  # processing | done | failed | None
+        "grading_progress_current": exam.grading_progress_current,
+        "grading_progress_total": exam.grading_progress_total,
+        "grading_error": exam.grading_error,
+    }
+
+
 @router.get("/exams/{exam_id}/gradings")
 async def list_gradings(
     exam_id: int,

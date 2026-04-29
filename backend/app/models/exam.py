@@ -24,6 +24,10 @@ class Exam(Base):
     exam_paper_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     exam_paper_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # processing|done|failed
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+    grading_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # processing|done|failed
+    grading_progress_current: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    grading_progress_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    grading_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), server_default=func.now(), nullable=False
     )

@@ -52,6 +52,7 @@ export default function GradingPage({
   const [downloading, setDownloading] = useState(false)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [gradeModalOpen, setGradeModalOpen] = useState(false)
+  const [gradeProgress, setGradeProgress] = useState<{ current: number; total: number | null } | null>(null)
   const { data: classes } = useSWR(
     `exams/${examId}/classes`,
     () => classesApi.list(Number(examId))
@@ -64,6 +65,7 @@ export default function GradingPage({
   const handleGrade = async (selectedClassIds: number[]) => {
     setGradeModalOpen(false)
     setGrading(true)
+    setGradeProgress({ current: 0, total: null })
     try {
       // 전체 선택이면 class_ids 없이 (기존 동작 유지)
       const isAll = !classes || selectedClassIds.length === classes.length
@@ -71,22 +73,42 @@ export default function GradingPage({
       let attempts = 0
       const poll = async () => {
         attempts++
-        const data = await examsApi.getGradingResults(Number(examId))
-        if (data && data.length > 0) {
-          mutate(data)
-          setGrading(false)
-          toast('채점이 완료되었습니다.', 'success')
-        } else if (attempts < 60) {
-          setTimeout(poll, 3000)
+        try {
+          const status = await examsApi.getGradingStatus(Number(examId))
+          setGradeProgress({
+            current: status.grading_progress_current,
+            total: status.grading_progress_total,
+          })
+          if (status.grading_status === 'done') {
+            const data = await examsApi.getGradingResults(Number(examId))
+            mutate(data)
+            setGrading(false)
+            setGradeProgress(null)
+            toast('채점이 완료되었습니다.', 'success')
+            return
+          }
+          if (status.grading_status === 'failed') {
+            setGrading(false)
+            setGradeProgress(null)
+            toast(`채점 실패: ${status.grading_error || '알 수 없는 오류'}`, 'danger')
+            return
+          }
+        } catch {
+          // 한 번 폴링 실패해도 다음 시도
+        }
+        if (attempts < 200) {
+          setTimeout(poll, 1500)
         } else {
           setGrading(false)
-          toast('채점 결과를 확인할 수 없습니다. 페이지를 새로고침하세요.', 'warning')
+          setGradeProgress(null)
+          toast('채점이 너무 오래 걸립니다. 페이지를 새로고침해주세요.', 'warning')
         }
       }
-      setTimeout(poll, 3000)
+      setTimeout(poll, 1500)
     } catch (e) {
       toast(e instanceof Error ? e.message : '채점 실패', 'danger')
       setGrading(false)
+      setGradeProgress(null)
     }
   }
 
@@ -168,6 +190,23 @@ export default function GradingPage({
               )}
             </div>
           </div>
+
+          {/* 일괄 채점 진행상황 */}
+          {grading && gradeProgress && (
+            <Card padding="sm" className="mb-4">
+              <ProgressBar
+                value={gradeProgress.current}
+                max={gradeProgress.total ?? undefined}
+                label={
+                  gradeProgress.total
+                    ? gradeProgress.current < gradeProgress.total
+                      ? `${gradeProgress.current + 1}번째 문항 채점 중 (${gradeProgress.current}/${gradeProgress.total}문항 완료)`
+                      : `${gradeProgress.total}/${gradeProgress.total}문항 완료, 정리 중...`
+                    : '채점 준비 중...'
+                }
+              />
+            </Card>
+          )}
 
           {/* 문항별 진행률 */}
           {questions && questions.length > 0 && (

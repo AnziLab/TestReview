@@ -109,6 +109,7 @@ async def run_grading(
     """BackgroundTask: auto-grade all answers for an exam question by question.
 
     class_ids가 주어지면 그 반의 학생 답안만 채점, 미지정 시 전체 반.
+    문항별 진행상황을 exam.grading_progress_current/total에 갱신.
     """
     async with AsyncSessionLocal() as db:
         exam = await db.get(Exam, exam_id)
@@ -120,13 +121,20 @@ async def run_grading(
             logger.error(f"Teacher {teacher_id} has no Gemini API key")
             return
 
+        # 진행상황 초기화
+        questions_result = await db.execute(
+            select(Question).where(Question.exam_id == exam_id).order_by(Question.order_index)
+        )
+        questions = questions_result.scalars().all()
+
+        exam.grading_status = "processing"
+        exam.grading_progress_current = 0
+        exam.grading_progress_total = len(questions)
+        exam.grading_error = None
+        await db.commit()
+
         try:
             client = get_gemini_client(teacher.gemini_api_key_encrypted)
-
-            questions_result = await db.execute(
-                select(Question).where(Question.exam_id == exam_id)
-            )
-            questions = questions_result.scalars().all()
 
             for question in questions:
                 try:
@@ -138,13 +146,24 @@ async def run_grading(
                     )
                 except Exception as exc:
                     logger.warning(f"Grading failed for question {question.id}: {exc}")
-                    continue
+                    # 한 문항 실패해도 다음으로 진행
+                exam.grading_progress_current += 1
+                await db.commit()
 
             # 전체 반을 채점한 경우에만 status를 graded로 변경
             if not class_ids:
                 exam.status = "graded"
+            exam.grading_status = "done"
             await db.commit()
             logger.info(f"Grading done for exam {exam_id} (classes={class_ids or 'all'})")
 
         except Exception as exc:
             logger.exception(f"Grading failed for exam {exam_id}: {exc}")
+            try:
+                exam = await db.get(Exam, exam_id)
+                if exam:
+                    exam.grading_status = "failed"
+                    exam.grading_error = str(exc)[:1000]
+                    await db.commit()
+            except Exception:
+                pass

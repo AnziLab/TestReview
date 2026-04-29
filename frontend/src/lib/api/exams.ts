@@ -43,6 +43,15 @@ export const examsApi = {
       body: JSON.stringify(classIds && classIds.length > 0 ? { class_ids: classIds } : {}),
     }),
 
+  getGradingStatus: (id: number) =>
+    apiFetch<{
+      id: number
+      grading_status: 'processing' | 'done' | 'failed' | null
+      grading_progress_current: number
+      grading_progress_total: number | null
+      grading_error: string | null
+    }>(`/exams/${id}/grading-status`),
+
   getGradingResults: (id: number) =>
     apiFetch<GradingResult[]>(`/exams/${id}/gradings`),
 
