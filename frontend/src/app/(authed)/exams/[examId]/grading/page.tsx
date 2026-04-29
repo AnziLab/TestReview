@@ -23,6 +23,8 @@ interface StudentGradingRow {
   student_id: number
   student_number?: string
   name?: string
+  class_id?: number
+  class_name?: string
   answer_text: string
   score: number | null
   max_score: number
@@ -693,31 +695,58 @@ function QuestionAnswerList({ questionId }: { questionId: number }) {
     return <div className="px-4 py-4 text-sm text-slate-400 border-t border-slate-100">채점 결과 없음</div>
   }
 
+  // 반별로 그룹핑 (반 이름 순서 유지 — 응답이 이미 반→학번으로 정렬되어 옴)
+  const groups: { classId: number | undefined; className: string; rows: StudentGradingRow[] }[] = []
+  for (const row of data) {
+    const last = groups[groups.length - 1]
+    if (last && last.classId === row.class_id) {
+      last.rows.push(row)
+    } else {
+      groups.push({
+        classId: row.class_id,
+        className: row.class_name ?? '(반 미지정)',
+        rows: [row],
+      })
+    }
+  }
+
   return (
-    <div className="border-t border-slate-100 divide-y divide-slate-100">
-      {data.map((row) => (
-        <div key={row.student_id} className="px-4 py-3 flex gap-4">
-          {/* 학생 정보 + 점수 */}
-          <div className="w-24 flex-shrink-0">
-            <p className="text-sm font-medium text-slate-800">{row.name ?? '-'}</p>
-            <p className="text-xs text-slate-400">{row.student_number ?? '-'}</p>
-            <p className={`text-sm font-bold mt-1 ${
-              row.score === row.max_score ? 'text-emerald-600'
-              : row.score === 0 ? 'text-rose-500'
-              : row.score != null ? 'text-amber-600'
-              : 'text-slate-400'
-            }`}>
-              {row.score != null ? `${row.score}점` : '-'}
-            </p>
-          </div>
-          {/* 답안 + 근거 */}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-2 py-1 mb-1">
-              {row.answer_text || <span className="text-slate-400 italic">무응답</span>}
-            </p>
-            {row.rationale && (
-              <p className="text-xs text-slate-500 italic">{row.rationale}</p>
-            )}
+    <div className="border-t border-slate-100">
+      {groups.map((group, idx) => (
+        <div key={`${group.classId ?? 'none'}-${idx}`}>
+          {groups.length > 1 && (
+            <div className="sticky top-0 bg-slate-100 px-4 py-1.5 border-b border-slate-200 text-xs font-semibold text-slate-700 z-10">
+              {group.className}
+              <span className="ml-1.5 font-normal text-slate-500">· {group.rows.length}명</span>
+            </div>
+          )}
+          <div className="divide-y divide-slate-100">
+            {group.rows.map((row) => (
+              <div key={row.student_id} className="px-4 py-3 flex gap-4">
+                {/* 학생 정보 + 점수 */}
+                <div className="w-24 flex-shrink-0">
+                  <p className="text-sm font-medium text-slate-800">{row.name ?? '-'}</p>
+                  <p className="text-xs text-slate-400">{row.student_number ?? '-'}</p>
+                  <p className={`text-sm font-bold mt-1 ${
+                    row.score === row.max_score ? 'text-emerald-600'
+                    : row.score === 0 ? 'text-rose-500'
+                    : row.score != null ? 'text-amber-600'
+                    : 'text-slate-400'
+                  }`}>
+                    {row.score != null ? `${row.score}점` : '-'}
+                  </p>
+                </div>
+                {/* 답안 + 근거 */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-2 py-1 mb-1">
+                    {row.answer_text || <span className="text-slate-400 italic">무응답</span>}
+                  </p>
+                  {row.rationale && (
+                    <p className="text-xs text-slate-500 italic">{row.rationale}</p>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       ))}

@@ -262,7 +262,7 @@ async def question_grading_results(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """문항 1개의 전체 학생 답안 + 채점결과."""
+    """문항 1개의 전체 학생 답안 + 채점결과 + 반 정보. 반→학번 순 정렬."""
     from app.models.exam import Question
 
     question = await db.get(Question, question_id)
@@ -270,11 +270,12 @@ async def question_grading_results(
         raise HTTPException(status_code=404, detail="Question not found")
 
     rows = (await db.execute(
-        select(Answer, Grading, Student)
+        select(Answer, Grading, Student, Class)
         .outerjoin(Grading, Grading.answer_id == Answer.id)
         .join(Student, Answer.student_id == Student.id)
+        .join(Class, Student.class_id == Class.id)
         .where(Answer.question_id == question_id)
-        .order_by(Student.student_number)
+        .order_by(Class.name, Student.student_number)
     )).all()
 
     return [
@@ -282,11 +283,13 @@ async def question_grading_results(
             "student_id": s.id,
             "student_number": s.student_number,
             "name": s.name,
+            "class_id": cls.id,
+            "class_name": cls.name,
             "answer_text": a.answer_text,
             "score": float(g.score) if g else None,
             "max_score": float(question.max_score),
             "rationale": g.rationale if g else None,
             "graded_by": g.graded_by if g else None,
         }
-        for a, g, s in rows
+        for a, g, s, cls in rows
     ]
