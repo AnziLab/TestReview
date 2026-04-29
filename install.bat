@@ -26,13 +26,14 @@ git --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo      Git not found. Installing via winget...
     winget install --id Git.Git --source winget --silent --accept-package-agreements --accept-source-agreements
+    set "PATH=%PATH%;%ProgramFiles%\Git\cmd"
+    git --version >nul 2>&1
     if %errorlevel% neq 0 (
         echo [!] Git install failed. Install manually:
         echo     https://git-scm.com/download/win
         pause
         exit /b 1
     )
-    set "PATH=%PATH%;%ProgramFiles%\Git\cmd"
 )
 git --version
 echo      Git OK
@@ -43,14 +44,15 @@ python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo      Python not found. Installing via winget...
     winget install --id Python.Python.3.11 --source winget --silent --accept-package-agreements --accept-source-agreements
+    call refreshenv >nul 2>&1
+    set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts"
+    python --version >nul 2>&1
     if %errorlevel% neq 0 (
         echo [!] Python install failed. Install manually:
         echo     https://www.python.org/downloads/
         pause
         exit /b 1
     )
-    call refreshenv >nul 2>&1
-    set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts"
 )
 python --version
 echo      Python OK
@@ -62,13 +64,14 @@ node --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo      Node.js not found. Installing via winget...
     winget install --id OpenJS.NodeJS.LTS --source winget --silent --accept-package-agreements --accept-source-agreements
+    set "PATH=%PATH%;%ProgramFiles%\nodejs"
+    node --version >nul 2>&1
     if %errorlevel% neq 0 (
         echo [!] Node.js install failed. Install manually:
         echo     https://nodejs.org/
         pause
         exit /b 1
     )
-    set "PATH=%PATH%;%ProgramFiles%\nodejs"
 )
 node --version
 echo      Node.js OK
