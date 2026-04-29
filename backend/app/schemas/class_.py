@@ -31,6 +31,8 @@ class OcrStatusOut(BaseModel):
     ocr_status: str
     ocr_error: Optional[str] = None
     students_count: int = 0
+    students_processed: int = 0
+    total_estimated: Optional[int] = None
 
 
 class StudentUpdate(BaseModel):
