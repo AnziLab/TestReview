@@ -3,6 +3,7 @@ setlocal enabledelayedexpansion
 title TestReview
 
 set INSTALL_DIR=%~dp0
+set UPDATED=0
 
 :: Auto-update if git repo
 if exist "%INSTALL_DIR%.git" (
@@ -15,8 +16,9 @@ if exist "%INSTALL_DIR%.git" (
         if not "!LOCAL!"=="!REMOTE!" (
             echo   New version found. Updating...
             git -C "%INSTALL_DIR%" pull --ff-only origin >nul 2>&1
-            if %errorlevel% equ 0 (
+            if !errorlevel! equ 0 (
                 echo   Updated OK
+                set UPDATED=1
             ) else (
                 echo   [!] Auto-update failed
             )
@@ -47,6 +49,8 @@ for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":3000 " ^| findstr LISTENING
     taskkill /PID %%p /F >nul 2>&1
 )
 
+if not exist "%INSTALL_DIR%logs" mkdir "%INSTALL_DIR%logs"
+
 echo Starting servers...
 cd /d "%INSTALL_DIR%backend"
 call .venv\Scripts\activate.bat
@@ -55,6 +59,27 @@ call .venv\Scripts\activate.bat
 if not exist ".env" (
     echo Generating .env...
     python scripts\gen_env.py .env
+)
+
+:: 코드가 새로 받아졌으면 의존성도 갱신 (requirements.txt / package.json 변경 가능)
+if "!UPDATED!"=="1" (
+    echo Updating Python packages...
+    pip install -r requirements.txt --quiet 2>>..\logs\backend.log
+    if !errorlevel! neq 0 echo [!] Python deps update failed - check logs\backend.log
+
+    echo Updating frontend packages...
+    pushd "%INSTALL_DIR%frontend"
+    call npm install --silent 2>>..\logs\frontend.log
+    if !errorlevel! neq 0 echo [!] Frontend deps update failed - check logs\frontend.log
+    popd
+)
+
+:: 첫 실행이거나 node_modules가 사라진 경우 강제 설치
+if not exist "%INSTALL_DIR%frontend\node_modules" (
+    echo Installing frontend packages for the first time...
+    pushd "%INSTALL_DIR%frontend"
+    call npm install --silent 2>>..\logs\frontend.log
+    popd
 )
 
 :: Apply DB migrations on every startup (after killing old uvicorn so DB is unlocked)
@@ -67,8 +92,6 @@ if %errorlevel% neq 0 (
 start /min "" cmd /c "cd /d "%INSTALL_DIR%backend" && .venv\Scripts\activate.bat && uvicorn app.main:app --host 127.0.0.1 --port 8000 2>>..\logs\backend.log"
 
 start /min "" cmd /c "cd /d "%INSTALL_DIR%frontend" && npm run dev -- --hostname 127.0.0.1 2>>..\logs\frontend.log"
-
-if not exist "%INSTALL_DIR%logs" mkdir "%INSTALL_DIR%logs"
 
 echo Waiting for servers...
 timeout /t 8 /nobreak >nul

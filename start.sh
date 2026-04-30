@@ -12,6 +12,7 @@ echo "====================================="
 echo ""
 
 # 0. 자동 업데이트
+UPDATED=0
 if [ -d "$SCRIPT_DIR/.git" ]; then
     echo "[업데이트 확인 중...]"
     if git -C "$SCRIPT_DIR" fetch origin --quiet 2>/dev/null; then
@@ -19,9 +20,12 @@ if [ -d "$SCRIPT_DIR/.git" ]; then
         REMOTE=$(git -C "$SCRIPT_DIR" rev-parse @{u} 2>/dev/null || echo "$LOCAL")
         if [ "$LOCAL" != "$REMOTE" ]; then
             echo "  새 버전이 있습니다. 업데이트 중..."
-            git -C "$SCRIPT_DIR" pull --ff-only origin 2>/dev/null \
-                && echo "  ✓ 업데이트 완료" \
-                || echo "  ⚠ 자동 업데이트 실패 — 수동으로 git pull 해주세요"
+            if git -C "$SCRIPT_DIR" pull --ff-only origin 2>/dev/null; then
+                echo "  ✓ 업데이트 완료"
+                UPDATED=1
+            else
+                echo "  ⚠ 자동 업데이트 실패 — 수동으로 git pull 해주세요"
+            fi
         else
             echo "  ✓ 최신 버전입니다"
         fi
@@ -64,7 +68,8 @@ echo "  ✓ 백엔드 준비 완료"
 # 2. 프론트엔드 의존성
 echo "[2/4] 프론트엔드 의존성 확인..."
 cd "$FRONTEND_DIR"
-if [ ! -d "node_modules" ]; then
+if [ ! -d "node_modules" ] || [ "$UPDATED" = "1" ]; then
+    echo "  ⌛ npm install 실행 중..."
     npm install --silent
 fi
 echo "  ✓ 프론트엔드 준비 완료"
