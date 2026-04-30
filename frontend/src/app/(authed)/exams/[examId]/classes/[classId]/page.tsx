@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { classesApi, studentsApi, questionsApi, answersApi } from '@/lib/api/exams'
 import type { Student, Answer, Question } from '@/lib/types'
 import { Button, Card, Spinner, Textarea, useToast } from '@/components/ui'
+import { MathText } from '@/components/MathText'
 
 export default function ClassDetailPage({
   params,
@@ -255,7 +256,9 @@ function StudentRow({
       </td>
       {showAnswers && questions.map((q) => (
         <td key={q.id} className="px-4 py-2.5 max-w-[120px]">
-          <span className="text-slate-600 text-xs line-clamp-2">{answerMap[q.id] || '-'}</span>
+          {answerMap[q.id]
+            ? <MathText text={answerMap[q.id]} className="text-slate-600 text-xs line-clamp-2" />
+            : <span className="text-slate-600 text-xs">-</span>}
         </td>
       ))}
     </tr>
@@ -323,12 +326,17 @@ function AnswerEditor({ studentId, questions }: { studentId: number; questions: 
               )}
             </div>
             <textarea
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none resize-none"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none resize-none font-mono"
               rows={2}
               value={currentText}
               onChange={(e) => setLocalTexts((p) => ({ ...p, [answer.id]: e.target.value }))}
               onBlur={(e) => handleBlur(answer.id, e.target.value)}
             />
+            {currentText.includes('$') && (
+              <div className="mt-1.5 text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-1.5">
+                <MathText text={currentText} />
+              </div>
+            )}
           </Card>
         )
       })}

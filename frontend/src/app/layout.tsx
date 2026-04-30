@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import 'katex/dist/katex.min.css'
 import { AuthProvider } from '@/lib/context/AuthContext'
 
 export const metadata: Metadata = {

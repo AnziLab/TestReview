@@ -7,6 +7,7 @@ import type { GradingExportOptions } from '@/lib/api/exams'
 import { apiFetch } from '@/lib/api/client'
 import type { Class, GradingResult } from '@/lib/types'
 import { Badge, Button, Card, Modal, ProgressBar, SegmentedControl, Spinner, useConfirm, useToast } from '@/components/ui'
+import { MathText } from '@/components/MathText'
 
 interface QuestionDetail {
   question_id: number
@@ -470,18 +471,20 @@ export default function GradingPage({
                 {/* 학생 답안 */}
                 <div className="mb-2">
                   <p className="text-xs text-slate-500 mb-0.5">학생 답안</p>
-                  <p className="text-sm text-slate-800 bg-white rounded-lg px-2 py-1.5 border border-slate-200">
-                    {item.answer_text || <span className="text-slate-400 italic">무응답</span>}
-                  </p>
+                  <div className="text-sm text-slate-800 bg-white rounded-lg px-2 py-1.5 border border-slate-200">
+                    {item.answer_text
+                      ? <MathText text={item.answer_text} />
+                      : <span className="text-slate-400 italic">무응답</span>}
+                  </div>
                 </div>
 
                 {/* 모범답안 */}
                 {item.model_answer && (
                   <div className="mb-2">
                     <p className="text-xs text-slate-500 mb-0.5">모범답안</p>
-                    <p className="text-xs text-indigo-700 bg-indigo-50 rounded-lg px-2 py-1 border border-indigo-100">
-                      {item.model_answer}
-                    </p>
+                    <div className="text-xs text-indigo-700 bg-indigo-50 rounded-lg px-2 py-1 border border-indigo-100">
+                      <MathText text={item.model_answer} />
+                    </div>
                   </div>
                 )}
 
@@ -489,7 +492,9 @@ export default function GradingPage({
                 {item.rationale && (
                   <div>
                     <p className="text-xs text-slate-500 mb-0.5">채점 근거</p>
-                    <p className="text-xs text-slate-600 italic">{item.rationale}</p>
+                    <div className="text-xs text-slate-600 italic">
+                      <MathText text={item.rationale} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -738,11 +743,15 @@ function QuestionAnswerList({ questionId }: { questionId: number }) {
                 </div>
                 {/* 답안 + 근거 */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-2 py-1 mb-1">
-                    {row.answer_text || <span className="text-slate-400 italic">무응답</span>}
-                  </p>
+                  <div className="text-sm text-slate-700 bg-slate-50 rounded-lg px-2 py-1 mb-1">
+                    {row.answer_text
+                      ? <MathText text={row.answer_text} />
+                      : <span className="text-slate-400 italic">무응답</span>}
+                  </div>
                   {row.rationale && (
-                    <p className="text-xs text-slate-500 italic">{row.rationale}</p>
+                    <div className="text-xs text-slate-500 italic">
+                      <MathText text={row.rationale} />
+                    </div>
                   )}
                 </div>
               </div>
