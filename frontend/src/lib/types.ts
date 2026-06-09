@@ -58,6 +58,7 @@ export interface Student {
   class_id: number
   student_number?: string
   name?: string
+  ocr_error?: string
   needs_review: boolean
 }
 

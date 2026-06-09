@@ -107,7 +107,7 @@ async def re_ocr_student(
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
-    from app.gemini.ocr import _assess_confidence, _call_gemini_for_student
+    from app.gemini.ocr import _assess_confidence, call_gemini_for_student_with_retry
     import fitz
 
     # 업로드된 PDF 열기
@@ -143,22 +143,17 @@ async def re_ocr_student(
         client = get_gemini_client(current_user.gemini_api_key_encrypted)
 
         try:
-            data = await _call_gemini_for_student(
+            data = await call_gemini_for_student_with_retry(
                 client, doc, page_indices, question_numbers,
                 current_user.ocr_prompt_override,
                 current_user.gemini_model or DEFAULT_MODEL,
             )
         except Exception as e:
-            logger.warning(f"Re-OCR primary call failed for student {student_id}: {e}")
-            try:
-                data = await _call_gemini_for_student(
-                    client, doc, page_indices[:1], question_numbers,
-                    current_user.ocr_prompt_override,
-                    current_user.gemini_model or DEFAULT_MODEL,
-                )
-            except Exception as e2:
-                logger.exception(f"Re-OCR fallback call failed for student {student_id}: {e2}")
-                raise HTTPException(status_code=500, detail=f"OCR 실패: {e2}")
+            logger.exception(f"Re-OCR failed for student {student_id}: {e}")
+            student.ocr_error = str(e)[:2000]
+            student.needs_review = True
+            await db.commit()
+            raise HTTPException(status_code=500, detail=f"OCR 실패: {e}") from e
     finally:
         try:
             doc.close()
@@ -182,7 +177,8 @@ async def re_ocr_student(
 
     confidence = _assess_confidence(data)
     student.ocr_confidence = confidence
-    student.needs_review = (confidence == "low")
+    student.ocr_error = None
+    student.needs_review = (confidence != "high")
 
     await db.commit()
     await db.refresh(student)

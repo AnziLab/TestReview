@@ -224,7 +224,12 @@ function StudentRow({
               {student.name ?? '-'}
             </span>
             {student.needs_review && (
-              <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">검토필요</span>
+              <span
+                className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full"
+                title={student.ocr_error || '답안을 확인해주세요.'}
+              >
+                {student.ocr_error ? 'OCR 실패' : '검토필요'}
+              </span>
             )}
             <Button
               variant="ghost"
@@ -252,6 +257,11 @@ function StudentRow({
               onChange={handleReOcrFile}
             />
           </div>
+        )}
+        {student.ocr_error && (
+          <p className="text-xs text-rose-600 mt-1 max-w-xs whitespace-pre-wrap">
+            {student.ocr_error}
+          </p>
         )}
       </td>
       {showAnswers && questions.map((q) => (

@@ -51,6 +51,7 @@ class Student(Base):
     name: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     page_indices: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     ocr_confidence: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    ocr_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), server_default=func.now(), nullable=False

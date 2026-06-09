@@ -48,6 +48,7 @@ class StudentOut(BaseModel):
     name: Optional[str] = None
     page_indices: Any
     ocr_confidence: Optional[str] = None
+    ocr_error: Optional[str] = None
     needs_review: bool
     created_at: datetime
     updated_at: datetime

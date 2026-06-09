@@ -60,16 +60,79 @@ async def _call_gemini_for_student(
         contents=parts,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
+            response_schema={
+                "type": "object",
+                "properties": {
+                    "answers": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "question_number": {"type": "string"},
+                                "answer_text": {"type": "string"},
+                            },
+                            "required": ["question_number", "answer_text"],
+                        },
+                    }
+                },
+                "required": ["answers"],
+            },
         ),
     )
 
     try:
         data = json.loads(response.text)
-    except json.JSONDecodeError:
-        # Fallback: return empty structure
-        data = {"answers": []}
+    except (json.JSONDecodeError, TypeError) as exc:
+        raw = response.text[:500] if response.text else "(empty response)"
+        raise ValueError(f"Gemini OCR returned invalid JSON: {raw}") from exc
+
+    answers = data.get("answers")
+    if not isinstance(answers, list):
+        raise ValueError("Gemini OCR response has no answers list")
+    known_numbers = set(question_numbers)
+    recognized = [
+        answer for answer in answers
+        if str(answer.get("question_number", "")) in known_numbers
+    ]
+    if question_numbers and not recognized:
+        returned = [str(answer.get("question_number", "")) for answer in answers]
+        raise ValueError(
+            f"Gemini OCR returned no recognized question numbers. Returned: {returned[:20]}"
+        )
+
+    answer_map = {
+        str(answer.get("question_number")): str(answer.get("answer_text") or "")
+        for answer in recognized
+    }
+    data["answers"] = [
+        {"question_number": number, "answer_text": answer_map.get(number, "")}
+        for number in question_numbers
+    ]
 
     return data
+
+
+async def call_gemini_for_student_with_retry(
+    client: genai.Client,
+    doc: fitz.Document,
+    page_indices: list[int],
+    question_numbers: list[str],
+    prompt_override: str | None = None,
+    model: str = DEFAULT_MODEL,
+    attempts: int = 3,
+) -> dict:
+    """Retry the same student's complete page set and preserve the last error."""
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return await _call_gemini_for_student(
+                client, doc, page_indices, question_numbers, prompt_override, model
+            )
+        except Exception as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                await asyncio.sleep(1.5 * (attempt + 1))
+    raise RuntimeError(f"OCR failed after {attempts} attempts: {last_error}") from last_error
 
 
 def _assess_confidence(data: dict) -> str:
@@ -117,15 +180,14 @@ async def ocr_class_pdf(
 
     for page_indices in groups:
         try:
-            data = await _call_gemini_for_student(client, doc, page_indices, q_numbers, prompt_override, model)
-        except Exception:
-            try:
-                data = await _call_gemini_for_student(client, doc, page_indices[:1], q_numbers, prompt_override, model)
-            except Exception:
-                data = {"answers": []}
+            data = await call_gemini_for_student_with_retry(
+                client, doc, page_indices, q_numbers, prompt_override, model
+            )
+        except Exception as exc:
+            data = {"answers": [], "error": str(exc)}
 
         confidence = _assess_confidence(data)
-        needs_review = confidence == "low"
+        needs_review = confidence != "high"
 
         results.append(
             {

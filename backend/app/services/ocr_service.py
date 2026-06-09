@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
 from app.gemini.client import DEFAULT_MODEL, get_gemini_client
-from app.gemini.ocr import _call_gemini_for_student, _group_pages, _assess_confidence
+from app.gemini.ocr import _assess_confidence, _group_pages, call_gemini_for_student_with_retry
 from app.models.answer import Answer
 from app.models.class_ import Class, Student
 from app.models.exam import Question
@@ -63,23 +63,20 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
             await db.commit()
 
             groups = _group_pages(total_pages, class_obj.scan_mode)
+            failures: list[str] = []
 
             for page_indices in groups:
+                error: str | None = None
                 try:
-                    data = await _call_gemini_for_student(
+                    data = await call_gemini_for_student_with_retry(
                         client, doc, page_indices, question_numbers, ocr_prompt_override,
                         teacher.gemini_model or DEFAULT_MODEL,
                     )
                 except Exception as e:
-                    logger.warning(f"OCR primary call failed for pages {page_indices}: {e}")
-                    try:
-                        data = await _call_gemini_for_student(
-                            client, doc, page_indices[:1], question_numbers, ocr_prompt_override,
-                            teacher.gemini_model or DEFAULT_MODEL,
-                        )
-                    except Exception as e2:
-                        logger.warning(f"OCR fallback call failed for pages {page_indices[:1]}: {e2}")
-                        data = {"answers": []}
+                    error = f"페이지 {', '.join(str(index + 1) for index in page_indices)}: {e}"
+                    failures.append(error)
+                    logger.warning(f"OCR failed for pages {page_indices}: {e}")
+                    data = {"answers": []}
 
                 confidence = _assess_confidence(data)
 
@@ -90,7 +87,8 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
                     name=None,
                     page_indices=page_indices,
                     ocr_confidence=confidence,
-                    needs_review=(confidence == "low"),
+                    ocr_error=error[:2000] if error else None,
+                    needs_review=(confidence != "high"),
                 )
                 db.add(student)
                 await db.flush()
@@ -114,10 +112,15 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
                     f"OCR class {class_id}: {class_obj.students_processed}/{len(groups)} 완료"
                 )
 
-            class_obj.ocr_status = "done"
-            class_obj.ocr_error = None
+            class_obj.ocr_status = "failed" if len(failures) == len(groups) else "done"
+            class_obj.ocr_error = (
+                f"{len(failures)}명 OCR 실패\n" + "\n".join(failures)
+            )[:4000] if failures else None
             await db.commit()
-            logger.info(f"OCR done for class {class_id}: {len(groups)} students")
+            logger.info(
+                f"OCR finished for class {class_id}: "
+                f"{len(groups) - len(failures)} succeeded, {len(failures)} failed"
+            )
 
         except Exception as exc:
             logger.exception(f"OCR failed for class {class_id}: {exc}")
