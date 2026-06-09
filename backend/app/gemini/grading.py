@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 
 from app.gemini.prompts import GRADING_DEFAULT, render, select_template
-from app.gemini.client import DEFAULT_MODEL
+from app.gemini.client import DEFAULT_MODEL, should_retry_gemini_error
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ async def grade_answers(
                 break
             except Exception as exc:
                 last_error = exc
-                if attempt == GRADING_MAX_ATTEMPTS:
+                if not should_retry_gemini_error(exc) or attempt == GRADING_MAX_ATTEMPTS:
                     raise
                 logger.warning(
                     "Gemini grading batch failed (answers %s, attempt %s/%s): %s",

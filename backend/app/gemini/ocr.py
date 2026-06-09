@@ -8,7 +8,7 @@ from google import genai
 from google.genai import types
 
 from app.gemini.prompts import OCR_DEFAULT, render, select_template
-from app.gemini.client import DEFAULT_MODEL
+from app.gemini.client import DEFAULT_MODEL, should_retry_gemini_error
 
 
 def _build_ocr_prompt(question_numbers: list[str], template_override: str | None = None) -> str:
@@ -130,6 +130,8 @@ async def call_gemini_for_student_with_retry(
             )
         except Exception as exc:
             last_error = exc
+            if not should_retry_gemini_error(exc):
+                raise RuntimeError(f"OCR failed without retry: {exc}") from exc
             if attempt + 1 < attempts:
                 await asyncio.sleep(1.5 * (attempt + 1))
     raise RuntimeError(f"OCR failed after {attempts} attempts: {last_error}") from last_error

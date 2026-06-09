@@ -7,11 +7,29 @@ DEFAULT_MODEL = "gemini-3.5-flash"
 PREFERRED_MODELS = (DEFAULT_MODEL, "gemini-3-flash-preview", "gemini-2.5-flash")
 MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
+NON_RETRYABLE_ERROR_MARKERS = (
+    "resource_exhausted",
+    "quota exceeded",
+    "free_tier",
+    "requestsperday",
+    "prepayment credits are depleted",
+    "invalid_argument",
+    "permission_denied",
+    "unauthenticated",
+    "api key not valid",
+)
+
 
 def get_gemini_client(encrypted_api_key: str) -> genai.Client:
     """Decrypt user's stored API key and return an authenticated Gemini client."""
     api_key = decrypt_api_key(encrypted_api_key)
     return genai.Client(api_key=api_key)
+
+
+def should_retry_gemini_error(exc: Exception) -> bool:
+    """Return False for errors that another immediate request cannot resolve."""
+    message = str(exc).lower()
+    return not any(marker in message for marker in NON_RETRYABLE_ERROR_MARKERS)
 
 
 def _developer_api_error(message: str, status: str | None, reason: str | None) -> ValueError:
