@@ -23,7 +23,7 @@ async def _grade_question(
     prompt_override: str | None = None,
     class_ids: list[int] | None = None,
     model: str = DEFAULT_MODEL,
-) -> None:
+) -> bool:
     """문항 1개 채점 (upsert). 공통 로직.
 
     class_ids가 주어지면 해당 반에 속한 학생의 답안만 채점.
@@ -35,7 +35,7 @@ async def _grade_question(
         stmt = stmt.join(Student, Answer.student_id == Student.id).where(Student.class_id.in_(class_ids))
     answers = (await db.execute(stmt)).scalars().all()
     if not answers:
-        return
+        return False
 
     answer_dicts = [{"id": a.id, "text": a.answer_text} for a in answers]
     grading_results = await grade_answers(
@@ -47,6 +47,8 @@ async def _grade_question(
         prompt_override=prompt_override,
         model=model,
     )
+    if not grading_results:
+        raise ValueError(f"Gemini returned no grading results for question {question.number}")
 
     answer_ids = [r.get("answer_id") for r in grading_results if r.get("answer_id")]
     existing = {
@@ -78,6 +80,7 @@ async def _grade_question(
             g.updated_at = datetime.now(timezone.utc)
 
     await db.flush()
+    return True
 
 
 async def run_grading_question(question_id: int, teacher_id: int) -> None:
@@ -139,20 +142,53 @@ async def run_grading(
         try:
             client = get_gemini_client(teacher.gemini_api_key_encrypted)
 
+            graded_questions = 0
+            skipped_questions = 0
+            failures: list[str] = []
+
             for question in questions:
                 try:
-                    await _grade_question(
+                    graded = await _grade_question(
                         db, client, question,
                         extra_instructions=teacher.grading_extra_instructions,
                         prompt_override=teacher.grading_prompt_override,
                         class_ids=class_ids,
                         model=teacher.gemini_model or DEFAULT_MODEL,
                     )
+                    if graded:
+                        graded_questions += 1
+                    else:
+                        skipped_questions += 1
                 except Exception as exc:
+                    message = f"{question.number}번: {exc}"
+                    failures.append(message)
                     logger.warning(f"Grading failed for question {question.id}: {exc}")
-                    # 한 문항 실패해도 다음으로 진행
+                    await db.rollback()
+                    exam = await db.get(Exam, exam_id)
+                    if exam is None:
+                        return
                 exam.grading_progress_current += 1
                 await db.commit()
+
+            if failures:
+                exam.grading_status = "failed"
+                exam.grading_error = "\n".join(failures)[:4000]
+                await db.commit()
+                logger.error(
+                    f"Grading incomplete for exam {exam_id}: "
+                    f"{graded_questions} succeeded, {len(failures)} failed"
+                )
+                return
+
+            if graded_questions == 0:
+                exam.grading_status = "failed"
+                exam.grading_error = (
+                    "채점할 답안이 없습니다."
+                    if skipped_questions
+                    else "채점할 문항이 없습니다."
+                )
+                await db.commit()
+                return
 
             # 전체 반을 채점한 경우에만 status를 graded로 변경
             if not class_ids:

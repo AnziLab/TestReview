@@ -42,7 +42,7 @@ async def start_grading(
     db: AsyncSession = Depends(get_db),
 ):
     """일괄 채점 시작. body.class_ids가 있으면 그 반만, 없으면 전체."""
-    await _get_exam_owned(exam_id, current_user.id, db)
+    exam = await _get_exam_owned(exam_id, current_user.id, db)
 
     if not current_user.gemini_api_key_encrypted:
         raise HTTPException(status_code=400, detail="Gemini API key not configured")
@@ -62,6 +62,12 @@ async def start_grading(
                 status_code=400,
                 detail=f"이 시험에 속하지 않는 반: {sorted(invalid)}"
             )
+
+    exam.grading_status = "processing"
+    exam.grading_progress_current = 0
+    exam.grading_progress_total = None
+    exam.grading_error = None
+    await db.commit()
 
     background_tasks.add_task(
         run_grading,

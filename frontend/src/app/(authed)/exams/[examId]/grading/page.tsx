@@ -56,6 +56,7 @@ export default function GradingPage({
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [gradeModalOpen, setGradeModalOpen] = useState(false)
   const [gradeProgress, setGradeProgress] = useState<{ current: number; total: number | null } | null>(null)
+  const [gradingError, setGradingError] = useState<string | null>(null)
   const { data: classes } = useSWR(
     `exams/${examId}/classes`,
     () => classesApi.list(Number(examId))
@@ -68,6 +69,7 @@ export default function GradingPage({
   const handleGrade = async (selectedClassIds: number[]) => {
     setGradeModalOpen(false)
     setGrading(true)
+    setGradingError(null)
     setGradeProgress({ current: 0, total: null })
     try {
       // 전체 선택이면 class_ids 없이 (기존 동작 유지)
@@ -93,7 +95,9 @@ export default function GradingPage({
           if (status.grading_status === 'failed') {
             setGrading(false)
             setGradeProgress(null)
-            toast(`채점 실패: ${status.grading_error || '알 수 없는 오류'}`, 'danger')
+            const message = status.grading_error || '알 수 없는 오류'
+            setGradingError(message)
+            toast(`채점 실패: ${message}`, 'danger')
             return
           }
         } catch {
@@ -109,7 +113,9 @@ export default function GradingPage({
       }
       setTimeout(poll, 1500)
     } catch (e) {
-      toast(e instanceof Error ? e.message : '채점 실패', 'danger')
+      const message = e instanceof Error ? e.message : '채점 실패'
+      setGradingError(message)
+      toast(message, 'danger')
       setGrading(false)
       setGradeProgress(null)
     }
@@ -209,6 +215,13 @@ export default function GradingPage({
                 }
               />
             </Card>
+          )}
+
+          {gradingError && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-4 text-rose-700">
+              <p className="font-medium">채점 실패</p>
+              <p className="text-sm mt-1 whitespace-pre-wrap">{gradingError}</p>
+            </div>
           )}
 
           {/* 문항별 진행률 */}
