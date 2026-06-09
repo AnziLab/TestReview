@@ -8,6 +8,7 @@ from google import genai
 from google.genai import types
 
 from app.gemini.prompts import OCR_DEFAULT, render, select_template
+from app.gemini.client import DEFAULT_MODEL
 
 
 def _build_ocr_prompt(question_numbers: list[str], template_override: str | None = None) -> str:
@@ -44,6 +45,7 @@ async def _call_gemini_for_student(
     page_indices: list[int],
     question_numbers: list[str],
     prompt_override: str | None = None,
+    model: str = DEFAULT_MODEL,
 ) -> dict:
     """열려있는 doc에서 해당 페이지만 렌더링해 Gemini 호출."""
     parts = []
@@ -54,7 +56,7 @@ async def _call_gemini_for_student(
 
     response = await asyncio.to_thread(
         client.models.generate_content,
-        model="gemini-2.5-flash",
+        model=model,
         contents=parts,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -92,6 +94,7 @@ async def ocr_class_pdf(
     scan_mode: str,
     question_numbers: list[str] | None = None,
     prompt_override: str | None = None,
+    model: str = DEFAULT_MODEL,
 ) -> list[dict]:
     """
     Process a full class PDF and return a list of student records.
@@ -114,10 +117,10 @@ async def ocr_class_pdf(
 
     for page_indices in groups:
         try:
-            data = await _call_gemini_for_student(client, doc, page_indices, q_numbers, prompt_override)
+            data = await _call_gemini_for_student(client, doc, page_indices, q_numbers, prompt_override, model)
         except Exception:
             try:
-                data = await _call_gemini_for_student(client, doc, page_indices[:1], q_numbers, prompt_override)
+                data = await _call_gemini_for_student(client, doc, page_indices[:1], q_numbers, prompt_override, model)
             except Exception:
                 data = {"answers": []}
 

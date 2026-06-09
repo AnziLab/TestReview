@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.gemini.client import get_gemini_client
+from app.gemini.client import DEFAULT_MODEL, get_gemini_client
 from app.gemini.exam_paper_extract import extract_exam_paper
 from app.models.exam import Exam, Question
 from app.models.user import User
@@ -39,6 +39,7 @@ async def run_exam_paper_extraction(
             extracted = await extract_exam_paper(
                 client, file_path, question_from, question_to,
                 prompt_override=teacher.exam_paper_extract_prompt_override,
+                model=teacher.gemini_model or DEFAULT_MODEL,
             )
 
             # Fetch all questions for this exam

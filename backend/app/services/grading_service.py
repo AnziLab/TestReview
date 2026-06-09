@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.gemini.client import get_gemini_client
+from app.gemini.client import DEFAULT_MODEL, get_gemini_client
 from app.gemini.grading import grade_answers
 from app.models.answer import Answer
 from app.models.class_ import Student
@@ -22,6 +22,7 @@ async def _grade_question(
     extra_instructions: str | None = None,
     prompt_override: str | None = None,
     class_ids: list[int] | None = None,
+    model: str = DEFAULT_MODEL,
 ) -> None:
     """문항 1개 채점 (upsert). 공통 로직.
 
@@ -44,6 +45,7 @@ async def _grade_question(
         question_text=question.question_text,
         extra_instructions=extra_instructions,
         prompt_override=prompt_override,
+        model=model,
     )
 
     answer_ids = [r.get("answer_id") for r in grading_results if r.get("answer_id")]
@@ -94,6 +96,7 @@ async def run_grading_question(question_id: int, teacher_id: int) -> None:
                 db, client, question,
                 extra_instructions=teacher.grading_extra_instructions,
                 prompt_override=teacher.grading_prompt_override,
+                model=teacher.gemini_model or DEFAULT_MODEL,
             )
             await db.commit()
             logger.info(f"Re-grading done for question {question_id}")
@@ -143,6 +146,7 @@ async def run_grading(
                         extra_instructions=teacher.grading_extra_instructions,
                         prompt_override=teacher.grading_prompt_override,
                         class_ids=class_ids,
+                        model=teacher.gemini_model or DEFAULT_MODEL,
                     )
                 except Exception as exc:
                     logger.warning(f"Grading failed for question {question.id}: {exc}")

@@ -34,6 +34,7 @@ export default function NewExamPage() {
 
   const { data: extractionStatus, error: pollingError } = usePolling<{
     status: 'pending' | 'processing' | 'done' | 'failed'
+    error?: string | null
     questions?: Question[]
   }>(
     pollingUrl,
@@ -111,7 +112,7 @@ export default function NewExamPage() {
     router.push(`/exams/${exam.id}`)
   }
 
-  const isExtracting = pollingUrl && (!extractionStatus || extractionStatus.status === 'pending' || extractionStatus.status === 'processing')
+  const isExtracting = pollingUrl && !pollingError && (!extractionStatus || extractionStatus.status === 'pending' || extractionStatus.status === 'processing')
   const extractFailed = (extractionStatus?.status === 'failed') || pollingError
 
   return (
@@ -280,7 +281,9 @@ export default function NewExamPage() {
               {extractFailed && (
                 <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-700">
                   <p className="font-medium">실패</p>
-                  <p className="text-sm mt-1">파일을 다시 확인하고 재시도하세요.</p>
+                  <p className="text-sm mt-1">
+                    {extractionStatus?.error || pollingError?.message || '파일을 다시 확인하고 재시도하세요.'}
+                  </p>
                   <Button
                     variant="danger"
                     size="sm"

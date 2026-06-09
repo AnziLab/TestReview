@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_current_user, get_db
-from app.gemini.client import ping_gemini
+from app.gemini.client import DEFAULT_MODEL, choose_default_model, list_gemini_models
 from app.gemini.prompts import PROMPTS, validate_template
 from app.models.user import User
 from app.schemas.auth import PasswordChangeRequest, UserOut
@@ -26,10 +26,18 @@ class ApiKeyRequest(BaseModel):
     api_key: str
 
 
+class GeminiModelRequest(BaseModel):
+    model: str
+
+
 @router.get("/api-key")
 async def get_api_key(current_user: User = Depends(get_current_user)):
     has_key = current_user.gemini_api_key_encrypted is not None
-    return {"has_api_key": has_key, "masked_key": "****" if has_key else None}
+    return {
+        "has_api_key": has_key,
+        "masked_key": "****" if has_key else None,
+        "model": current_user.gemini_model or DEFAULT_MODEL,
+    }
 
 
 @router.put("/api-key")
@@ -38,10 +46,25 @@ async def set_api_key(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    current_user.gemini_api_key_encrypted = encrypt_api_key(body.api_key)
+    api_key = body.api_key.strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API 키를 입력하세요.")
+    encrypted_key = encrypt_api_key(api_key)
+    try:
+        models = await list_gemini_models(encrypted_key)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    available = {model["id"] for model in models}
+    current_user.gemini_api_key_encrypted = encrypted_key
+    if current_user.gemini_model not in available:
+        current_user.gemini_model = choose_default_model(models)
     db.add(current_user)
     await db.commit()
-    return {"message": "API key saved", "masked": mask_api_key(body.api_key)}
+    return {
+        "message": "API key saved",
+        "masked": mask_api_key(api_key),
+        "model": current_user.gemini_model,
+    }
 
 
 @router.delete("/api-key")
@@ -50,6 +73,7 @@ async def delete_api_key(
     db: AsyncSession = Depends(get_db),
 ):
     current_user.gemini_api_key_encrypted = None
+    current_user.gemini_model = None
     db.add(current_user)
     await db.commit()
     return {"message": "API key deleted"}
@@ -59,10 +83,58 @@ async def delete_api_key(
 async def test_api_key(current_user: User = Depends(get_current_user)):
     if not current_user.gemini_api_key_encrypted:
         raise HTTPException(status_code=400, detail="No API key configured")
-    ok = await ping_gemini(current_user.gemini_api_key_encrypted)
-    if not ok:
-        return {"success": False, "message": "API 키가 유효하지 않습니다."}
-    return {"success": True, "message": "API 키가 유효합니다."}
+    try:
+        models = await list_gemini_models(current_user.gemini_api_key_encrypted)
+    except Exception as exc:
+        return {"success": False, "message": str(exc)}
+    if not models:
+        return {"success": False, "message": "사용 가능한 Gemini 텍스트 생성 모델이 없습니다."}
+    return {
+        "success": True,
+        "message": f"API 키가 유효합니다. 사용 가능한 모델 {len(models)}개를 확인했습니다.",
+        "models": models,
+    }
+
+
+@router.get("/gemini-models")
+async def get_gemini_models(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.gemini_api_key_encrypted:
+        raise HTTPException(status_code=400, detail="No API key configured")
+    try:
+        models = await list_gemini_models(current_user.gemini_api_key_encrypted)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    available = {model["id"] for model in models}
+    selected = current_user.gemini_model
+    if selected not in available:
+        selected = choose_default_model(models)
+        current_user.gemini_model = selected
+        db.add(current_user)
+        await db.commit()
+    return {"models": models, "selected": selected}
+
+
+@router.put("/gemini-model")
+async def set_gemini_model(
+    body: GeminiModelRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.gemini_api_key_encrypted:
+        raise HTTPException(status_code=400, detail="No API key configured")
+    try:
+        models = await list_gemini_models(current_user.gemini_api_key_encrypted)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if body.model not in {model["id"] for model in models}:
+        raise HTTPException(status_code=400, detail="이 API 키로 사용할 수 없는 모델입니다.")
+    current_user.gemini_model = body.model
+    db.add(current_user)
+    await db.commit()
+    return {"success": True, "model": body.model}
 
 
 @router.put("/password")

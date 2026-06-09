@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.gemini.client import get_gemini_client
+from app.gemini.client import DEFAULT_MODEL, get_gemini_client
 from app.gemini.generate_rubric import generate_rubric_from_paper
 from app.models.exam import Exam, Question
 from app.models.user import User
@@ -28,7 +28,8 @@ async def run_rubric_generation(
 
             teacher = await db.get(User, teacher_id)
             if not teacher or not teacher.gemini_api_key_encrypted:
-                exam.status = "draft"
+                exam.status = "rubric_failed"
+                exam.rubric_extraction_error = "Gemini API key is not configured."
                 await db.commit()
                 return
 
@@ -39,6 +40,7 @@ async def run_rubric_generation(
                 school_level=exam.school_level,
                 grade=exam.grade,
                 prompt_override=teacher.rubric_generate_prompt_override,
+                model=teacher.gemini_model or DEFAULT_MODEL,
             )
 
             # 기존 문항 삭제 후 새로 저장
@@ -67,6 +69,7 @@ async def run_rubric_generation(
                 db.add(question)
 
             exam.status = "rubric_ready"
+            exam.rubric_extraction_error = None
             await db.commit()
             logger.info(f"Rubric generation done for exam {exam_id}: {len(data.get('questions', []))} questions")
 
@@ -76,6 +79,7 @@ async def run_rubric_generation(
                 exam = await db.get(Exam, exam_id)
                 if exam:
                     exam.status = "rubric_failed"
+                    exam.rubric_extraction_error = str(exc)[:4000]
                     await db.commit()
             except Exception:
                 pass

@@ -38,6 +38,7 @@ export default function LoginPage() {
       })
     }
   }
+  const submit = handleSubmit(onSubmit)
 
   if (loading) return null
 
@@ -46,10 +47,20 @@ export default function LoginPage() {
       <div className="w-full max-w-[400px] px-4">
         <Card padding="lg">
           <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">로그인</h1>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form
+            onSubmit={submit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                event.preventDefault()
+                void submit()
+              }
+            }}
+            className="space-y-4"
+          >
             <Input
               label="아이디"
               placeholder="아이디 입력"
+              autoFocus
               error={errors.username?.message}
               {...register('username', { required: '아이디를 입력하세요.' })}
             />

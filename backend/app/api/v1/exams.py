@@ -139,6 +139,7 @@ async def upload_rubric_file(
 
     exam.rubric_source_filename = file.filename
     exam.rubric_source_path = saved_path
+    exam.rubric_extraction_error = None
     exam.status = "draft"
     await db.commit()
 
@@ -183,6 +184,7 @@ async def rubric_extraction_status(
         "status": ext_status,
         "rubric_source_filename": exam.rubric_source_filename,
         "questions_count": len(questions),
+        "error": exam.rubric_extraction_error if ext_status == "failed" else None,
         "questions": [
             {
                 "id": q.id,
@@ -295,6 +297,7 @@ async def generate_rubric_from_paper(
 
     exam.exam_paper_filename = file.filename
     exam.exam_paper_path = saved_path
+    exam.rubric_extraction_error = None
     exam.status = "draft"
     await db.commit()
 

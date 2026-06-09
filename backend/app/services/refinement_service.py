@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.gemini.client import get_gemini_client
+from app.gemini.client import DEFAULT_MODEL, get_gemini_client
 from app.gemini.clustering import cluster_answers
 from app.models.answer import Answer
 from app.models.exam import Question
@@ -56,6 +56,7 @@ async def run_refinement(session_id: int, question_id: int, teacher_id: int) -> 
                 question_text=question.question_text,
                 extra_instructions=teacher.clustering_extra_instructions,
                 prompt_override=teacher.clustering_prompt_override,
+                model=teacher.gemini_model or DEFAULT_MODEL,
             )
 
             # Build answer id → Answer map

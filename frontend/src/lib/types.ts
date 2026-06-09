@@ -7,6 +7,7 @@ export interface User {
   role: 'teacher' | 'admin'
   status: 'pending' | 'approved' | 'rejected'
   has_api_key: boolean
+  gemini_model?: string | null
   grading_extra_instructions?: string | null
   clustering_extra_instructions?: string | null
 }

@@ -8,6 +8,7 @@ from google import genai
 from google.genai import types
 
 from app.gemini.prompts import RUBRIC_EXTRACT_DEFAULT, select_template
+from app.gemini.client import DEFAULT_MODEL
 
 
 def _pdf_to_images(pdf_path: str) -> list[bytes]:
@@ -26,6 +27,7 @@ async def extract_rubric_from_file(
     client: genai.Client,
     file_path: str,
     prompt_override: str | None = None,
+    model: str = DEFAULT_MODEL,
 ) -> dict:
     """
     Send PDF pages to Gemini and return structured rubric JSON.
@@ -84,7 +86,7 @@ async def extract_rubric_from_file(
 
     response = await asyncio.to_thread(
         client.models.generate_content,
-        model="gemini-2.5-flash",
+        model=model,
         contents=parts,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",

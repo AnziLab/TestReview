@@ -106,7 +106,7 @@ echo.
 
 :WAIT
 timeout /t 5 /nobreak >nul
-curl -s http://127.0.0.1:8000/api/v1/auth/me >nul 2>&1
+curl -s --fail http://127.0.0.1:8000/health >nul 2>&1
 if %errorlevel% neq 0 (
     echo [!] Backend stopped. Restarting...
     start /min "" cmd /c "cd /d "%INSTALL_DIR%backend" && .venv\Scripts\activate.bat && uvicorn app.main:app --host 127.0.0.1 --port 8000 2>>..\logs\backend.log"

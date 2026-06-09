@@ -2,14 +2,21 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1
 
 async function refreshAccessToken(): Promise<string | null> {
   try {
+    const refreshToken = localStorage.getItem('refresh_token')
+    if (!refreshToken) return null
     const res = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
     })
     if (!res.ok) return null
     const data = await res.json()
     if (data.access_token) {
       localStorage.setItem('access_token', data.access_token)
+      if (data.refresh_token) {
+        localStorage.setItem('refresh_token', data.refresh_token)
+      }
       return data.access_token
     }
     return null
@@ -64,6 +71,7 @@ export async function apiFetch<T>(
     }
     if (typeof window !== 'undefined') {
       localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
       window.location.href = '/login'
     }
     throw new Error('Unauthorized')

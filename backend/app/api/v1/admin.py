@@ -22,6 +22,7 @@ def _user_to_out(user: User) -> UserOut:
         role=user.role,
         status=user.status,
         has_api_key=bool(user.gemini_api_key_encrypted),
+        gemini_model=user.gemini_model,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )

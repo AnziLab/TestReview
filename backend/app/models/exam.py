@@ -20,6 +20,7 @@ class Exam(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     rubric_source_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     rubric_source_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    rubric_extraction_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     exam_paper_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     exam_paper_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     exam_paper_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # processing|done|failed

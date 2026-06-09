@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 
 from app.gemini.prompts import EXAM_PAPER_EXTRACT_DEFAULT, render, select_template
+from app.gemini.client import DEFAULT_MODEL
 
 
 def _build_prompt(
@@ -30,6 +31,7 @@ async def extract_exam_paper(
     question_from: int,
     question_to: int,
     prompt_override: str | None = None,
+    model: str = DEFAULT_MODEL,
 ) -> dict[int, str]:
     """
     Returns {question_number (int): question_text (str)} for numbers in [from, to].
@@ -54,7 +56,7 @@ async def extract_exam_paper(
 
     response = await asyncio.to_thread(
         client.models.generate_content,
-        model="gemini-2.5-flash",
+        model=model,
         contents=parts,
         config=types.GenerateContentConfig(response_mime_type="application/json"),
     )

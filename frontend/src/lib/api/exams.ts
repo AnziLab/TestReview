@@ -35,7 +35,7 @@ export const examsApi = {
   },
 
   getExtractionStatus: (id: number) =>
-    apiFetch<{ status: 'pending' | 'processing' | 'done' | 'failed'; questions?: Question[] }>(`/exams/${id}/rubric-extraction`),
+    apiFetch<{ status: 'pending' | 'processing' | 'done' | 'failed'; error?: string | null; questions?: Question[] }>(`/exams/${id}/rubric-extraction`),
 
   grade: (id: number, classIds?: number[]) =>
     apiFetch<{ task_id: string }>(`/exams/${id}/grade`, {
@@ -166,7 +166,7 @@ export const answersApi = {
 }
 
 export const meApi = {
-  getApiKey: () => apiFetch<{ has_api_key: boolean; masked_key?: string }>('/me/api-key'),
+  getApiKey: () => apiFetch<{ has_api_key: boolean; masked_key?: string; model: string }>('/me/api-key'),
 
   setApiKey: (api_key: string) =>
     apiFetch<{ success: boolean }>('/me/api-key', {
@@ -177,7 +177,16 @@ export const meApi = {
   deleteApiKey: () => apiFetch<void>('/me/api-key', { method: 'DELETE' }),
 
   testApiKey: () =>
-    apiFetch<{ success: boolean; message?: string }>('/me/api-key/test', { method: 'POST' }),
+    apiFetch<{ success: boolean; message?: string; models?: GeminiModel[] }>('/me/api-key/test', { method: 'POST' }),
+
+  listGeminiModels: () =>
+    apiFetch<{ models: GeminiModel[]; selected: string }>('/me/gemini-models'),
+
+  setGeminiModel: (model: string) =>
+    apiFetch<{ success: boolean; model: string }>('/me/gemini-model', {
+      method: 'PUT',
+      body: JSON.stringify({ model }),
+    }),
 
   updateProfile: (data: { full_name?: string; email?: string; school?: string }) =>
     apiFetch<{ success: boolean }>('/me/profile', {
@@ -211,6 +220,12 @@ export const meApi = {
 
   clearPrompt: (key: string) =>
     apiFetch<{ success: boolean }>(`/me/prompts/${key}`, { method: 'DELETE' }),
+}
+
+export interface GeminiModel {
+  id: string
+  name: string
+  description?: string | null
 }
 
 export const adminApi = {

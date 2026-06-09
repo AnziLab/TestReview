@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { useForm } from 'react-hook-form'
 import { meApi } from '@/lib/api/exams'
 import { useAuth } from '@/lib/context/AuthContext'
 import { apiFetch } from '@/lib/api/client'
-import { Button, Card, Input, Modal, Spinner, Textarea, useConfirm, useToast } from '@/components/ui'
+import { Button, Card, Input, Modal, Select, Spinner, Textarea, useConfirm, useToast } from '@/components/ui'
 
 interface FormData {
   api_key: string
@@ -17,6 +17,7 @@ export default function ApiKeySettingsPage() {
   const { refreshUser } = useAuth()
   const confirm = useConfirm()
   const toast = useToast()
+  const { mutate: mutateCache } = useSWRConfig()
   const [testing, setTesting] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -26,7 +27,7 @@ export default function ApiKeySettingsPage() {
     try {
       await meApi.setApiKey(formData.api_key)
       reset()
-      await Promise.all([mutate(), refreshUser()])
+      await Promise.all([mutate(), mutateCache('me/gemini-models'), refreshUser()])
       toast('API 키가 저장되었습니다.', 'success')
     } catch (e) {
       setError('api_key', { message: e instanceof Error ? e.message : '저장 실패' })
@@ -38,7 +39,7 @@ export default function ApiKeySettingsPage() {
     try {
       const res = await meApi.testApiKey()
       if (res.success) {
-        toast('키가 유효합니다.', 'success')
+        toast(res.message || '키가 유효합니다.', 'success')
       } else {
         toast(`테스트 실패: ${res.message}`, 'danger')
       }
@@ -60,7 +61,7 @@ export default function ApiKeySettingsPage() {
     setDeleting(true)
     try {
       await meApi.deleteApiKey()
-      mutate()
+      await Promise.all([mutate(), mutateCache('me/gemini-models'), refreshUser()])
       toast('API 키가 삭제되었습니다.', 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : '삭제 실패', 'danger')
@@ -108,6 +109,8 @@ export default function ApiKeySettingsPage() {
             )}
           </Card>
 
+          {data?.has_api_key && <GeminiModelSettings />}
+
           <Card className="mb-4">
             <h2 className="font-medium text-slate-800 mb-3">{data?.has_api_key ? '키 업데이트' : '키 등록'}</h2>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
@@ -129,6 +132,52 @@ export default function ApiKeySettingsPage() {
       )}
       </div>
     </div>
+  )
+}
+
+function GeminiModelSettings() {
+  const { data, isLoading, error, mutate } = useSWR('me/gemini-models', () => meApi.listGeminiModels())
+  const toast = useToast()
+  const [saving, setSaving] = useState(false)
+
+  const handleChange = async (model: string) => {
+    setSaving(true)
+    try {
+      await meApi.setGeminiModel(model)
+      await mutate()
+      toast(`Gemini 모델을 ${model}(으)로 변경했습니다.`, 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '모델 변경 실패', 'danger')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card className="mb-4">
+      <h2 className="font-medium text-slate-800 mb-1">Gemini 모델</h2>
+      <p className="text-xs text-slate-500 mb-3">
+        현재 API 키로 조회된 텍스트 생성 모델입니다. 선택한 모델은 추출, OCR, 정제, 채점에 모두 적용됩니다.
+      </p>
+      {isLoading ? (
+        <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+      ) : error ? (
+        <p className="text-sm text-rose-600">{error.message}</p>
+      ) : (
+        <Select
+          label="사용 모델"
+          value={data?.selected}
+          disabled={saving}
+          onChange={(event) => void handleChange(event.target.value)}
+        >
+          {data?.models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name} ({model.id})
+            </option>
+          ))}
+        </Select>
+      )}
+    </Card>
   )
 }
 

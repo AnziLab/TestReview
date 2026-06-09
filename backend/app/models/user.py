@@ -23,6 +23,7 @@ class User(Base):
     )
     approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     gemini_api_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    gemini_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     grading_extra_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     clustering_extra_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ocr_prompt_override: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

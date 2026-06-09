@@ -36,6 +36,7 @@ export default function RubricPage({
 
   const { data: extractionStatus, error: pollingError } = usePolling<{
     status: 'pending' | 'processing' | 'done' | 'failed'
+    error?: string | null
     questions?: Question[]
   }>(
     pollingUrl,
@@ -52,7 +53,7 @@ export default function RubricPage({
     }
   )
 
-  const isExtracting = pollingUrl && (!extractionStatus || extractionStatus.status === 'pending' || extractionStatus.status === 'processing')
+  const isExtracting = pollingUrl && !pollingError && (!extractionStatus || extractionStatus.status === 'pending' || extractionStatus.status === 'processing')
   const extractFailed = (extractionStatus?.status === 'failed') || pollingError
 
   const handleUpload = async () => {
@@ -107,7 +108,9 @@ export default function RubricPage({
         ) : extractFailed ? (
           <div className="bg-rose-50 border border-rose-200 rounded-xl p-6">
             <p className="font-medium text-rose-700">추출 실패</p>
-            <p className="text-sm text-rose-600 mt-1">파일을 다시 확인하고 재시도해주세요.</p>
+            <p className="text-sm text-rose-600 mt-1">
+              {extractionStatus?.error || pollingError?.message || '파일을 다시 확인하고 재시도해주세요.'}
+            </p>
             <Button
               variant="danger"
               size="sm"
@@ -169,7 +172,9 @@ export default function RubricPage({
           </div>
         ) : extractFailed ? (
           <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-4">
-            <p className="text-sm text-rose-700">추출에 실패했습니다. 파일을 확인하고 다시 시도해주세요.</p>
+            <p className="text-sm text-rose-700">
+              {extractionStatus?.error || pollingError?.message || '추출에 실패했습니다. 파일을 확인하고 다시 시도해주세요.'}
+            </p>
           </div>
         ) : (
           <>

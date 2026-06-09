@@ -4,7 +4,7 @@ import logging
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
-from app.gemini.client import get_gemini_client
+from app.gemini.client import DEFAULT_MODEL, get_gemini_client
 from app.gemini.ocr import _call_gemini_for_student, _group_pages, _assess_confidence
 from app.models.answer import Answer
 from app.models.class_ import Class, Student
@@ -67,13 +67,15 @@ async def run_ocr(class_id: int, teacher_id: int) -> None:
             for page_indices in groups:
                 try:
                     data = await _call_gemini_for_student(
-                        client, doc, page_indices, question_numbers, ocr_prompt_override
+                        client, doc, page_indices, question_numbers, ocr_prompt_override,
+                        teacher.gemini_model or DEFAULT_MODEL,
                     )
                 except Exception as e:
                     logger.warning(f"OCR primary call failed for pages {page_indices}: {e}")
                     try:
                         data = await _call_gemini_for_student(
-                            client, doc, page_indices[:1], question_numbers, ocr_prompt_override
+                            client, doc, page_indices[:1], question_numbers, ocr_prompt_override,
+                            teacher.gemini_model or DEFAULT_MODEL,
                         )
                     except Exception as e2:
                         logger.warning(f"OCR fallback call failed for pages {page_indices[:1]}: {e2}")

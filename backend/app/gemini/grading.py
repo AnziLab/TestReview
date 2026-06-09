@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 
 from app.gemini.prompts import GRADING_DEFAULT, render, select_template
+from app.gemini.client import DEFAULT_MODEL
 
 
 async def grade_answers(
@@ -17,6 +18,7 @@ async def grade_answers(
     question_text: str | None = None,
     extra_instructions: str | None = None,
     prompt_override: str | None = None,
+    model: str = DEFAULT_MODEL,
 ) -> list[dict]:
     """
     Grade a list of answers for a single question.
@@ -58,7 +60,7 @@ async def grade_answers(
 
     response = await asyncio.to_thread(
         client.models.generate_content,
-        model="gemini-2.5-flash",
+        model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",

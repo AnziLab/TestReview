@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.deps import get_current_user, get_db
+from app.gemini.client import DEFAULT_MODEL, get_gemini_client
 from app.models.answer import Answer
 from app.models.class_ import Class, Student
 from app.models.exam import Exam, Question
@@ -106,7 +107,6 @@ async def re_ocr_student(
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
-    from app.gemini.client import get_gemini_client
     from app.gemini.ocr import _assess_confidence, _call_gemini_for_student
     import fitz
 
@@ -146,6 +146,7 @@ async def re_ocr_student(
             data = await _call_gemini_for_student(
                 client, doc, page_indices, question_numbers,
                 current_user.ocr_prompt_override,
+                current_user.gemini_model or DEFAULT_MODEL,
             )
         except Exception as e:
             logger.warning(f"Re-OCR primary call failed for student {student_id}: {e}")
@@ -153,6 +154,7 @@ async def re_ocr_student(
                 data = await _call_gemini_for_student(
                     client, doc, page_indices[:1], question_numbers,
                     current_user.ocr_prompt_override,
+                    current_user.gemini_model or DEFAULT_MODEL,
                 )
             except Exception as e2:
                 logger.exception(f"Re-OCR fallback call failed for student {student_id}: {e2}")
