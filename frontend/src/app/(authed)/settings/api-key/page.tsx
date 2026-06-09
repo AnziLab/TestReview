@@ -163,6 +163,10 @@ function GeminiModelSettings() {
         <div className="flex justify-center py-4"><Spinner size="sm" /></div>
       ) : error ? (
         <p className="text-sm text-rose-600">{error.message}</p>
+      ) : !data?.models.length ? (
+        <p className="text-sm text-rose-600">
+          이 키로 사용할 수 있는 Gemini 텍스트 생성 모델을 찾지 못했습니다.
+        </p>
       ) : (
         <Select
           label="사용 모델"
